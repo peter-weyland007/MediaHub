@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Tv, Search, Plus, RefreshCw, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,10 +10,19 @@ import { sonarrApi } from '@/lib/serviceApi';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
+import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
+import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
 import { toast } from 'sonner';
 
 export default function TvShows() {
-  const { config, isServiceReady } = useServiceConfig();
+  const navigate = useNavigate();
+  const {
+    config,
+    qualityPreferences,
+    posterDisplayPreferences,
+    updatePosterDisplayPreferences,
+    isServiceReady,
+  } = useServiceConfig();
   const [series, setSeries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -44,7 +54,14 @@ export default function TvShows() {
     setRootFolders(roots);
     setQualityProfiles(profiles);
     if (roots.length) setSelectedRoot(roots[0].path);
-    if (profiles.length) setSelectedQuality(String(profiles[0].id));
+
+    const preferredProfileId = qualityPreferences.tvProfileId ? String(qualityPreferences.tvProfileId) : '';
+    const preferredProfileExists = preferredProfileId && profiles.some((profile) => String(profile.id) === preferredProfileId);
+    if (preferredProfileExists) {
+      setSelectedQuality(preferredProfileId);
+    } else if (profiles.length) {
+      setSelectedQuality(String(profiles[0].id));
+    }
   };
 
   useEffect(() => {
@@ -54,7 +71,7 @@ export default function TvShows() {
     } else {
       setLoading(false);
     }
-  }, [ready]);
+  }, [ready, qualityPreferences.tvProfileId]);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -108,6 +125,10 @@ export default function TvShows() {
   return (
     <div>
       <PageHeader title="TV Shows" subtitle={`${series.length} series in library`} icon={Tv} accentColor="bg-sky-500/10">
+        <PosterDisplayControls
+          posterDisplayPreferences={posterDisplayPreferences}
+          onChange={updatePosterDisplayPreferences}
+        />
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -130,16 +151,19 @@ export default function TvShows() {
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {filteredSeries.map(show => (
+            <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
+{filteredSeries.map(show => (
             <MediaCard
               key={show.id}
               title={show.title}
               subtitle={getProgress(show) ? `Episodes: ${getProgress(show)}` : show.year ? String(show.year) : ''}
               image={getImage(show)}
+              hidePoster={posterDisplayPreferences.hidePosters}
+              posterSize={posterDisplayPreferences.posterSize}
               status={show.status === 'continuing' ? 'Continuing' : 'Ended'}
               statusColor={show.status === 'continuing' ? 'bg-sky-500/80 text-white' : 'bg-muted text-muted-foreground'}
               badges={show.network ? [show.network] : []}
+              onClick={() => navigate(`/tv-shows/${show.id}`)}
             />
           ))}
         </div>

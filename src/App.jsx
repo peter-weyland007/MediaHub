@@ -1,76 +1,62 @@
-import { Toaster } from "@/components/ui/toaster"
-import { QueryClientProvider } from '@tanstack/react-query'
-import { queryClientInstance } from '@/lib/query-client'
+import { Toaster } from '@/components/ui/toaster';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
-import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import { queryClientInstance } from '@/lib/query-client';
+import { AuthProvider } from '@/lib/AuthContext';
+import ProtectedRoute from '@/components/ProtectedRoute';
+import AdminRoute from '@/components/AdminRoute';
 import AppLayout from '@/components/layout/AppLayout';
+import PageNotFound from '@/lib/PageNotFound';
 import Dashboard from '@/pages/Dashboard';
 import Movies from '@/pages/Movies';
+import MovieDetails from '@/pages/MovieDetails';
 import TvShows from '@/pages/TvShows';
+import TvShowDetails from '@/pages/TvShowDetails';
+import TvSeasonDetails from '@/pages/TvSeasonDetails';
+import TvEpisodeDetails from '@/pages/TvEpisodeDetails';
+import TvCleanupQueue from '@/pages/TvCleanupQueue';
 import MusicPage from '@/pages/MusicPage';
 import Requests from '@/pages/Requests';
 import PlexLibrary from '@/pages/PlexLibrary';
 import Indexers from '@/pages/Indexers';
 import SettingsPage from '@/pages/SettingsPage';
 import QualityManager from '@/pages/QualityManager';
-
-const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
-
-  // Show loading spinner while checking app public settings or auth
-  if (isLoadingPublicSettings || isLoadingAuth) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
-      </div>
-    );
-  }
-
-  // Handle authentication errors
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
-      navigateToLogin();
-      return null;
-    }
-  }
-
-  // Render the main app
-  return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/movies" element={<Movies />} />
-        <Route path="/tv-shows" element={<TvShows />} />
-        <Route path="/music" element={<MusicPage />} />
-        <Route path="/requests" element={<Requests />} />
-        <Route path="/library" element={<PlexLibrary />} />
-        <Route path="/indexers" element={<Indexers />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/quality" element={<QualityManager />} />
-      </Route>
-      <Route path="*" element={<PageNotFound />} />
-    </Routes>
-  );
-};
-
+import LoginPage from '@/pages/LoginPage';
+import AdminUsersPage from '@/pages/AdminUsersPage';
 
 function App() {
-
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router>
-          <AuthenticatedApp />
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/movies" element={<Movies />} />
+                <Route path="/movies/:id" element={<MovieDetails />} />
+                <Route path="/tv-shows" element={<TvShows />} />
+                <Route path="/tv-shows/:id" element={<TvShowDetails />} />
+                <Route path="/tv-shows/:id/seasons/:seasonNumber" element={<TvSeasonDetails />} />
+                <Route path="/tv-shows/:id/episodes/:episodeId" element={<TvEpisodeDetails />} />
+                <Route path="/tv-cleanup" element={<TvCleanupQueue />} />
+                <Route path="/music" element={<MusicPage />} />
+                <Route path="/requests" element={<Requests />} />
+                <Route path="/library" element={<PlexLibrary />} />
+                <Route path="/indexers" element={<Indexers />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/quality" element={<QualityManager />} />
+                <Route path="/admin/users" element={<AdminRoute><AdminUsersPage /></AdminRoute>} />
+              </Route>
+            </Route>
+            <Route path="*" element={<PageNotFound />} />
+          </Routes>
         </Router>
         <Toaster />
       </QueryClientProvider>
     </AuthProvider>
-  )
+  );
 }
 
-export default App
+export default App;

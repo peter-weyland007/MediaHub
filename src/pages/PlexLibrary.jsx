@@ -1,25 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { Library, RefreshCw, Loader2, Play, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useServiceConfig } from '@/lib/useServiceConfig';
-import { plexApi } from '@/lib/serviceApi';
+import { plexApi, radarrApi, sonarrApi } from '@/lib/serviceApi';
+import { toast } from 'sonner';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
+import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
+import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
+import { resolveLibraryItemDetailsPath, resolveLibrarySeriesDetailsPath } from '@/components/shared/movieDetails';
 
 export default function PlexLibrary() {
-  const { config, isServiceReady } = useServiceConfig();
+  const navigate = useNavigate();
+  const { config, posterDisplayPreferences, updatePosterDisplayPreferences, isServiceReady } = useServiceConfig();
   const [libraries, setLibraries] = useState([]);
   const [selectedLib, setSelectedLib] = useState(null);
   const [content, setContent] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [radarrMovies, setRadarrMovies] = useState([]);
+  const [sonarrSeries, setSonarrSeries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingContent, setLoadingContent] = useState(false);
 
   const ready = isServiceReady('plex');
+  const radarrReady = isServiceReady('radarr');
+  const sonarrReady = isServiceReady('sonarr');
 
   const fetchLibraries = async () => {
     if (!ready) return;
@@ -49,6 +59,35 @@ export default function PlexLibrary() {
     else setLoading(false);
   }, [ready]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLibraryLinks = async () => {
+      try {
+        const [movies, series] = await Promise.all([
+          radarrReady ? radarrApi.getMovies(config.radarr) : Promise.resolve([]),
+          sonarrReady ? sonarrApi.getSeries(config.sonarr) : Promise.resolve([]),
+        ]);
+
+        if (!cancelled) {
+          setRadarrMovies(movies);
+          setSonarrSeries(series);
+        }
+      } catch {
+        if (!cancelled) {
+          setRadarrMovies([]);
+          setSonarrSeries([]);
+        }
+      }
+    };
+
+    loadLibraryLinks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [config.radarr, config.sonarr, radarrReady, sonarrReady]);
+
   const handleLibChange = (key) => {
     setSelectedLib(key);
     fetchContent(key);
@@ -68,9 +107,26 @@ export default function PlexLibrary() {
     return null;
   };
 
+  const handleItemClick = (item) => {
+    const detailsPath = item.type === 'show'
+      ? resolveLibrarySeriesDetailsPath(item, sonarrSeries)
+      : resolveLibraryItemDetailsPath(item, radarrMovies);
+
+    if (detailsPath) {
+      navigate(detailsPath);
+      return;
+    }
+
+    toast('No linked details available for this item yet.');
+  };
+
   return (
     <div>
       <PageHeader title="Library" subtitle="Browse your Plex media" icon={Library} accentColor="bg-orange-500/10">
+        <PosterDisplayControls
+          posterDisplayPreferences={posterDisplayPreferences}
+          onChange={updatePosterDisplayPreferences}
+        />
         <Button variant="outline" size="sm" onClick={fetchLibraries} disabled={loading}>
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
@@ -130,13 +186,16 @@ export default function PlexLibrary() {
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
               {content.slice(0, 60).map((item, i) => (
                 <MediaCard
                   key={i}
                   title={item.title}
                   subtitle={item.year ? String(item.year) : item.parentTitle || ''}
                   image={getThumb(item)}
+                  hidePoster={posterDisplayPreferences.hidePosters}
+                  posterSize={posterDisplayPreferences.posterSize}
+                  onClick={() => handleItemClick(item)}
                 />
               ))}
             </div>

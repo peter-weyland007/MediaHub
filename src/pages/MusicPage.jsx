@@ -7,9 +7,11 @@ import { lidarrApi } from '@/lib/serviceApi';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
+import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
+import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
 
 export default function MusicPage() {
-  const { config, isServiceReady } = useServiceConfig();
+  const { config, posterDisplayPreferences, updatePosterDisplayPreferences, isServiceReady } = useServiceConfig();
   const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -57,6 +59,10 @@ export default function MusicPage() {
   return (
     <div>
       <PageHeader title="Music" subtitle={`${artists.length} artists in library`} icon={Music} accentColor="bg-emerald-500/10">
+        <PosterDisplayControls
+          posterDisplayPreferences={posterDisplayPreferences}
+          onChange={updatePosterDisplayPreferences}
+        />
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -75,13 +81,15 @@ export default function MusicPage() {
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
           {filteredArtists.map(artist => (
             <MediaCard
               key={artist.id}
               title={artist.artistName}
               subtitle={artist.statistics ? `${artist.statistics.albumCount || 0} albums` : ''}
               image={getImage(artist)}
+              hidePoster={posterDisplayPreferences.hidePosters}
+              posterSize={posterDisplayPreferences.posterSize}
               status={artist.monitored ? 'Monitored' : 'Unmonitored'}
               statusColor={artist.monitored ? 'bg-emerald-500/80 text-white' : 'bg-muted text-muted-foreground'}
             />

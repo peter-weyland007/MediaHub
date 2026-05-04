@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Film, Tv, Music, Bell, Library, Search, LayoutDashboard, Activity, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Film, Tv, Music, Languages, Activity, Bell, Library, Search, LayoutDashboard, RefreshCw } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useServiceConfig } from '@/lib/useServiceConfig';
-import { radarrApi, sonarrApi, lidarrApi, overseerrApi, plexApi, prowlarrApi, serviceColors } from '@/lib/serviceApi';
+import { radarrApi, sonarrApi, lidarrApi, bazarrApi, tautulliApi, overseerrApi, plexApi, prowlarrApi, serviceColors } from '@/lib/serviceApi';
 import ServiceCard from '@/components/dashboard/ServiceCard';
 import ActivityItem from '@/components/dashboard/ActivityItem';
 import PageHeader from '@/components/shared/PageHeader';
@@ -12,19 +12,28 @@ const services = [
   { key: 'radarr', name: 'Radarr', icon: Film },
   { key: 'sonarr', name: 'Sonarr', icon: Tv },
   { key: 'lidarr', name: 'Lidarr', icon: Music },
+  { key: 'bazarr', name: 'Bazarr', icon: Languages },
+  { key: 'tautulli', name: 'Tautulli', icon: Activity },
   { key: 'overseerr', name: 'Overseerr', icon: Bell },
   { key: 'plex', name: 'Plex', icon: Library },
   { key: 'prowlarr', name: 'Prowlarr', icon: Search },
 ];
 
 export default function Dashboard() {
-  const { config, isServiceReady } = useServiceConfig();
+  const { config, isLoadingConfig } = useServiceConfig();
   const [statuses, setStatuses] = useState({});
   const [stats, setStats] = useState({});
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchAll = async () => {
+  const serviceReady = (service) => {
+    const current = config[service];
+    return current && current.enabled && current.url && current.apiKey;
+  };
+
+  const fetchAll = useCallback(async () => {
+    if (isLoadingConfig) return;
+
     setLoading(true);
     const newStatuses = {};
     const newStats = {};
@@ -32,12 +41,11 @@ export default function Dashboard() {
 
     const checks = [];
 
-    if (isServiceReady('radarr')) {
+    if (serviceReady('radarr')) {
       checks.push(
         radarrApi.getMovies(config.radarr)
           .then(movies => {
             newStatuses.radarr = 'connected';
-            const monitored = movies.filter(m => m.monitored).length;
             const downloaded = movies.filter(m => m.hasFile).length;
             newStats.radarr = [
               { label: 'Movies', value: movies.length },
@@ -63,7 +71,7 @@ export default function Dashboard() {
       );
     }
 
-    if (isServiceReady('sonarr')) {
+    if (serviceReady('sonarr')) {
       checks.push(
         sonarrApi.getSeries(config.sonarr)
           .then(series => {
@@ -92,7 +100,7 @@ export default function Dashboard() {
       );
     }
 
-    if (isServiceReady('lidarr')) {
+    if (serviceReady('lidarr')) {
       checks.push(
         lidarrApi.getArtists(config.lidarr)
           .then(artists => {
@@ -106,7 +114,40 @@ export default function Dashboard() {
       );
     }
 
-    if (isServiceReady('overseerr')) {
+    if (serviceReady('bazarr')) {
+      checks.push(
+        Promise.all([
+          bazarrApi.getMovies(config.bazarr),
+          bazarrApi.getSeries(config.bazarr),
+        ])
+          .then(([moviesResponse, seriesResponse]) => {
+            const movies = Array.isArray(moviesResponse) ? moviesResponse : (moviesResponse?.data ?? []);
+            const series = Array.isArray(seriesResponse) ? seriesResponse : (seriesResponse?.data ?? []);
+            newStatuses.bazarr = 'connected';
+            newStats.bazarr = [
+              { label: 'Movies', value: movies.length },
+              { label: 'Series', value: series.length },
+            ];
+          })
+          .catch(() => { newStatuses.bazarr = 'error'; })
+      );
+    }
+
+    if (serviceReady('tautulli')) {
+      checks.push(
+        tautulliApi.getActivity(config.tautulli)
+          .then(activity => {
+            newStatuses.tautulli = 'connected';
+            newStats.tautulli = [
+              { label: 'Streams', value: Number(activity.stream_count || 0) },
+              { label: 'Transcodes', value: Number(activity.stream_count_transcode || 0) },
+            ];
+          })
+          .catch(() => { newStatuses.tautulli = 'error'; })
+      );
+    }
+
+    if (serviceReady('overseerr')) {
       checks.push(
         overseerrApi.getRequestCount(config.overseerr)
           .then(counts => {
@@ -120,7 +161,7 @@ export default function Dashboard() {
       );
     }
 
-    if (isServiceReady('plex')) {
+    if (serviceReady('plex')) {
       checks.push(
         plexApi.getLibraries(config.plex)
           .then(data => {
@@ -135,7 +176,7 @@ export default function Dashboard() {
       );
     }
 
-    if (isServiceReady('prowlarr')) {
+    if (serviceReady('prowlarr')) {
       checks.push(
         prowlarrApi.getIndexers(config.prowlarr)
           .then(indexers => {
@@ -152,7 +193,7 @@ export default function Dashboard() {
     await Promise.allSettled(checks);
 
     services.forEach(s => {
-      if (!isServiceReady(s.key) && !newStatuses[s.key]) {
+      if (!serviceReady(s.key) && !newStatuses[s.key]) {
         newStatuses[s.key] = 'unconfigured';
       }
     });
@@ -161,11 +202,11 @@ export default function Dashboard() {
     setStats(newStats);
     setQueue(newQueue);
     setLoading(false);
-  };
+  }, [config, isLoadingConfig]);
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, [fetchAll]);
 
   return (
     <div>
@@ -176,8 +217,7 @@ export default function Dashboard() {
         </Button>
       </PageHeader>
 
-      {/* Service cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-8">
         {services.map(s => (
           <ServiceCard
             key={s.key}
@@ -190,7 +230,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Activity */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">

@@ -7,19 +7,19 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
-RUN apk add --no-cache gettext
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
 
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
-COPY docker/env-config.template.js /app/env-config.template.js
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY package*.json ./
+RUN npm ci --omit=dev
 
-RUN chmod +x /docker-entrypoint.sh
+COPY server ./server
+COPY --from=build /app/dist ./dist
 
-ENV VITE_BASE44_APP_ID=
-ENV VITE_BASE44_APP_BASE_URL=
-ENV VITE_BASE44_FUNCTIONS_VERSION=
+ENV PORT=8080
+ENV HOST=0.0.0.0
+ENV DATABASE_PATH=/app/data/mediahub.db
 
 EXPOSE 8080
-ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["npm", "run", "start"]

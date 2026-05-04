@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Film, Search, Plus, RefreshCw, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,10 +10,19 @@ import { radarrApi } from '@/lib/serviceApi';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
+import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
+import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
 import { toast } from 'sonner';
 
 export default function Movies() {
-  const { config, isServiceReady } = useServiceConfig();
+  const navigate = useNavigate();
+  const {
+    config,
+    qualityPreferences,
+    posterDisplayPreferences,
+    updatePosterDisplayPreferences,
+    isServiceReady,
+  } = useServiceConfig();
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -44,7 +54,14 @@ export default function Movies() {
     setRootFolders(roots);
     setQualityProfiles(profiles);
     if (roots.length) setSelectedRoot(roots[0].path);
-    if (profiles.length) setSelectedQuality(String(profiles[0].id));
+
+    const preferredProfileId = qualityPreferences.movieProfileId ? String(qualityPreferences.movieProfileId) : '';
+    const preferredProfileExists = preferredProfileId && profiles.some((profile) => String(profile.id) === preferredProfileId);
+    if (preferredProfileExists) {
+      setSelectedQuality(preferredProfileId);
+    } else if (profiles.length) {
+      setSelectedQuality(String(profiles[0].id));
+    }
   };
 
   useEffect(() => {
@@ -54,7 +71,7 @@ export default function Movies() {
     } else {
       setLoading(false);
     }
-  }, [ready]);
+  }, [ready, qualityPreferences.movieProfileId]);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
@@ -110,6 +127,10 @@ export default function Movies() {
   return (
     <div>
       <PageHeader title="Movies" subtitle={`${movies.length} movies in library`} icon={Film} accentColor="bg-amber-500/10">
+        <PosterDisplayControls
+          posterDisplayPreferences={posterDisplayPreferences}
+          onChange={updatePosterDisplayPreferences}
+        />
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36">
             <SelectValue />
@@ -135,15 +156,18 @@ export default function Movies() {
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
           {filteredMovies.map(movie => (
             <MediaCard
               key={movie.id}
               title={movie.title}
               subtitle={movie.year ? String(movie.year) : ''}
               image={getImage(movie)}
+              hidePoster={posterDisplayPreferences.hidePosters}
+              posterSize={posterDisplayPreferences.posterSize}
               status={movie.hasFile ? 'Downloaded' : movie.monitored ? 'Monitored' : 'Unmonitored'}
               statusColor={movie.hasFile ? 'bg-emerald-500/80 text-white' : movie.monitored ? 'bg-amber-500/80 text-white' : 'bg-muted text-muted-foreground'}
+              onClick={() => navigate(`/movies/${movie.id}`)}
             />
           ))}
         </div>

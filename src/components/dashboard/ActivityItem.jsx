@@ -11,7 +11,7 @@ const statusConfig = {
   error: { icon: AlertCircle, color: 'text-destructive', label: 'Error' },
 };
 
-export default function ActivityItem({ title, service, status = 'queued', progress, size }) {
+export default function ActivityItem({ title, service, downloadType, status = 'queued', progress, size }) {
   const config = statusConfig[status] || statusConfig.queued;
   const StatusIcon = config.icon;
 
@@ -24,6 +24,11 @@ export default function ActivityItem({ title, service, status = 'queued', progre
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
             {service}
           </Badge>
+          {downloadType && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 uppercase tracking-[0.14em]">
+              {downloadType}
+            </Badge>
+          )}
           {size && <span className="text-[10px] text-muted-foreground">{size}</span>}
         </div>
       </div>

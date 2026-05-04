@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Film, Search, Plus, RefreshCw, Loader2 } from 'lucide-react';
+import { Film, Search, Plus, RefreshCw, Loader2, LayoutGrid, Rows3, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchMovieDetailsData, fetchMovieReferenceData, getServiceCacheKey } from '@/lib/mediaQueries';
 import { radarrApi } from '@/lib/serviceApi';
@@ -14,6 +15,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
 import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
 import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
+import { movieSortOptions, sortMoviesForDisplay } from '@/lib/mediaBrowserPreferences';
 import { toast } from 'sonner';
 
 export default function Movies() {
@@ -23,7 +25,9 @@ export default function Movies() {
     config,
     qualityPreferences,
     posterDisplayPreferences,
+    mediaBrowserPreferences,
     updatePosterDisplayPreferences,
+    updateMediaBrowserPreferences,
     isServiceReady,
   } = useServiceConfig();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -36,6 +40,8 @@ export default function Movies() {
 
   const ready = isServiceReady('radarr');
   const serviceKey = getServiceCacheKey(config.radarr);
+  const viewMode = mediaBrowserPreferences.movies.viewMode;
+  const sortBy = mediaBrowserPreferences.movies.sortBy;
 
   const {
     data: moviesData,
@@ -147,11 +153,47 @@ export default function Movies() {
     return true;
   }), [movies, filter]);
 
+  const sortedMovies = useMemo(() => sortMoviesForDisplay(filteredMovies, sortBy), [filteredMovies, sortBy]);
+
   const getImage = (movie) => {
     const poster = movie.images?.find((image) => image.coverType === 'poster');
     if (poster?.remoteUrl) return poster.remoteUrl;
     if (poster?.url) return `${config.radarr.url}${poster.url}`;
     return null;
+  };
+
+  const getMovieRuntime = (movie) => {
+    if (Number(movie?.runtime) > 0) {
+      return `${movie.runtime} min`;
+    }
+    return '—';
+  };
+
+  const openMovieDetails = (movie) => {
+    queryClient.prefetchQuery({
+      queryKey: ['movie-details', ...serviceKey, String(movie.id)],
+      queryFn: () => fetchMovieDetailsData(config.radarr, movie.id),
+      staleTime: 2 * 60 * 1000,
+    });
+    navigate(`/movies/${movie.id}`);
+  };
+
+  const saveMovieBrowserPreferences = (nextSection) => updateMediaBrowserPreferences({
+    ...mediaBrowserPreferences,
+    movies: {
+      ...mediaBrowserPreferences.movies,
+      ...nextSection,
+    },
+  }).catch(() => {
+    toast.error('Failed to save movie view preferences');
+  });
+
+  const setMovieViewMode = (nextViewMode) => saveMovieBrowserPreferences({ viewMode: nextViewMode });
+  const setMovieSortBy = (nextSortBy) => saveMovieBrowserPreferences({ sortBy: nextSortBy });
+
+  const toggleMovieSort = (column) => {
+    const nextSortBy = sortBy === `${column}-asc` ? `${column}-desc` : `${column}-asc`;
+    setMovieSortBy(nextSortBy);
   };
 
   if (!ready) {
@@ -170,6 +212,24 @@ export default function Movies() {
           posterDisplayPreferences={posterDisplayPreferences}
           onChange={updatePosterDisplayPreferences}
         />
+        <div className="inline-flex items-center rounded-md border border-border bg-background p-1">
+          <Button variant={viewMode === 'browse' ? 'secondary' : 'ghost'} size="sm" onClick={() => setMovieViewMode('browse')}>
+            <LayoutGrid className="mr-2 h-4 w-4" />Browse
+          </Button>
+          <Button variant={viewMode === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setMovieViewMode('table')}>
+            <Rows3 className="mr-2 h-4 w-4" />Table
+          </Button>
+        </div>
+        <Select value={sortBy} onValueChange={setMovieSortBy}>
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {movieSortOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36">
             <SelectValue />
@@ -194,9 +254,44 @@ export default function Movies() {
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
+      ) : viewMode === 'table' ? (
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <Button variant="ghost" size="sm" className="-ml-3 h-8 px-3" onClick={() => toggleMovieSort('title')}>
+                    Title <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" className="-ml-3 h-8 px-3" onClick={() => toggleMovieSort('year')}>
+                    Year <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+                  </Button>
+                </TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Monitored</TableHead>
+                <TableHead>Downloaded</TableHead>
+                <TableHead>Runtime</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedMovies.map((movie) => (
+                <TableRow key={movie.id} className="cursor-pointer" onClick={() => openMovieDetails(movie)}>
+                  <TableCell className="font-medium">{movie.title}</TableCell>
+                  <TableCell>{movie.year || '—'}</TableCell>
+                  <TableCell>{movie.hasFile ? 'Downloaded' : movie.monitored ? 'Monitored' : 'Unmonitored'}</TableCell>
+                  <TableCell>{movie.monitored ? 'Yes' : 'No'}</TableCell>
+                  <TableCell>{movie.hasFile ? 'Yes' : 'No'}</TableCell>
+                  <TableCell>{getMovieRuntime(movie)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
         <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
-          {filteredMovies.map((movie) => (
+          {sortedMovies.map((movie) => (
             <MediaCard
               key={movie.id}
               title={movie.title}
@@ -206,14 +301,7 @@ export default function Movies() {
               posterSize={posterDisplayPreferences.posterSize}
               status={movie.hasFile ? 'Downloaded' : movie.monitored ? 'Monitored' : 'Unmonitored'}
               statusColor={movie.hasFile ? 'bg-emerald-500/80 text-white' : movie.monitored ? 'bg-amber-500/80 text-white' : 'bg-muted text-muted-foreground'}
-              onClick={() => {
-                queryClient.prefetchQuery({
-                  queryKey: ['movie-details', ...serviceKey, String(movie.id)],
-                  queryFn: () => fetchMovieDetailsData(config.radarr, movie.id),
-                  staleTime: 2 * 60 * 1000,
-                });
-                navigate(`/movies/${movie.id}`);
-              }}
+              onClick={() => openMovieDetails(movie)}
               onDelete={() => deleteMovie(movie.id)}
             />
           ))}

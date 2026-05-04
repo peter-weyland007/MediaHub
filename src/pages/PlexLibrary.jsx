@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Library, RefreshCw, Loader2, Play, Users } from 'lucide-react';
+import { Library, RefreshCw, Loader2, Play, Users, LayoutGrid, Rows3, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import {
   fetchMovieDetailsData,
@@ -22,18 +24,21 @@ import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
 import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
 import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
+import { librarySortOptions, sortLibraryItemsForDisplay } from '@/lib/mediaBrowserPreferences';
 import { resolveLibraryItemDetailsPath, resolveLibrarySeriesDetailsPath } from '@/components/shared/movieDetails';
 
 export default function PlexLibrary() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { config, posterDisplayPreferences, updatePosterDisplayPreferences, isServiceReady } = useServiceConfig();
+  const { config, posterDisplayPreferences, mediaBrowserPreferences, updatePosterDisplayPreferences, updateMediaBrowserPreferences, isServiceReady } = useServiceConfig();
   const [selectedLib, setSelectedLib] = useState(null);
 
   const ready = isServiceReady('plex');
   const radarrReady = isServiceReady('radarr');
   const sonarrReady = isServiceReady('sonarr');
   const tautulliReady = isServiceReady('tautulli');
+  const viewMode = mediaBrowserPreferences.library.viewMode;
+  const sortBy = mediaBrowserPreferences.library.sortBy;
   const plexKey = getServiceCacheKey(config.plex);
   const radarrKey = getServiceCacheKey(config.radarr);
   const sonarrKey = getServiceCacheKey(config.sonarr);
@@ -88,6 +93,7 @@ export default function PlexLibrary() {
 
   const radarrMovies = linkData.radarrMovies || [];
   const sonarrSeries = linkData.sonarrSeries || [];
+  const sortedContent = useMemo(() => sortLibraryItemsForDisplay(content.slice(0, 60), sortBy), [content, sortBy]);
 
   if (!ready) {
     return (
@@ -106,6 +112,16 @@ export default function PlexLibrary() {
   const handleRefresh = async () => {
     await Promise.all([refetchLibraries(), refetchContent()]);
   };
+
+  const saveLibraryBrowserPreferences = (nextSection) => updateMediaBrowserPreferences({
+    ...mediaBrowserPreferences,
+    library: {
+      ...mediaBrowserPreferences.library,
+      ...nextSection,
+    },
+  });
+
+  const toggleLibrarySort = () => saveLibraryBrowserPreferences({ sortBy: sortBy === 'title-asc' ? 'title-desc' : 'title-asc' });
 
   const handleItemClick = async (item) => {
     const detailsPath = item.type === 'show'
@@ -143,6 +159,20 @@ export default function PlexLibrary() {
           posterDisplayPreferences={posterDisplayPreferences}
           onChange={updatePosterDisplayPreferences}
         />
+        <div className="inline-flex items-center rounded-md border border-border bg-background p-1">
+          <Button variant={viewMode === 'browse' ? 'secondary' : 'ghost'} size="sm" onClick={() => saveLibraryBrowserPreferences({ viewMode: 'browse' })}>
+            <LayoutGrid className="mr-2 h-4 w-4" />Browse
+          </Button>
+          <Button variant={viewMode === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => saveLibraryBrowserPreferences({ viewMode: 'table' })}>
+            <Rows3 className="mr-2 h-4 w-4" />Table
+          </Button>
+        </div>
+        <Select value={sortBy} onValueChange={(value) => saveLibraryBrowserPreferences({ sortBy: value })}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {librarySortOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={fetchingLibraries || fetchingContent}>
           <RefreshCw className={`w-4 h-4 ${(fetchingLibraries || fetchingContent) ? 'animate-spin' : ''}`} />
         </Button>
@@ -198,9 +228,36 @@ export default function PlexLibrary() {
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
+          ) : viewMode === 'table' ? (
+            <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" className="-ml-3 h-8 px-3" onClick={toggleLibrarySort}>
+                        Title <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+                      </Button>
+                    </TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Collection</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedContent.map((item, index) => (
+                    <TableRow key={index} className="cursor-pointer" onClick={() => handleItemClick(item)}>
+                      <TableCell className="font-medium">{item.title}</TableCell>
+                      <TableCell>{item.type || '—'}</TableCell>
+                      <TableCell>{item.year || '—'}</TableCell>
+                      <TableCell>{item.parentTitle || '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           ) : (
             <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
-              {content.slice(0, 60).map((item, index) => (
+              {sortedContent.map((item, index) => (
                 <MediaCard
                   key={index}
                   title={item.title}

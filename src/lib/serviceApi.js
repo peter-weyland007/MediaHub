@@ -173,6 +173,8 @@ export const overseerrApi = {
   ...createServiceClient({ service: 'overseerr', serviceName: 'Overseerr' }),
   getRequests: (config) => overseerrApi.get(config, '/request?take=50&skip=0&sort=added'),
   getRequestCount: (config) => overseerrApi.get(config, '/request/count'),
+  getMovieDetails: (config, tmdbId) => overseerrApi.get(config, `/movie/${tmdbId}`),
+  getTvDetails: (config, tmdbId) => overseerrApi.get(config, `/tv/${tmdbId}`),
   approveRequest: (config, id) => overseerrApi.post(config, `/request/${id}/approve`),
   declineRequest: (config, id) => overseerrApi.post(config, `/request/${id}/decline`),
   getStatus: (config) => overseerrApi.get(config, '/status'),

@@ -231,6 +231,11 @@ export const createApp = ({
     return res.json({ posterDisplayPreferences: saved });
   });
 
+  app.put('/api/app-config/media-browser-preferences', (req, res) => {
+    const saved = store.saveMediaBrowserPreferences(req.body ?? {});
+    return res.json({ mediaBrowserPreferences: saved });
+  });
+
   app.put('/api/app-config/optimization-preferences', (req, res) => {
     const saved = store.saveOptimizationPreferences(req.body ?? {});
     return res.json({ optimizationPreferences: saved });

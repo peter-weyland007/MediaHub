@@ -45,6 +45,10 @@ test('GET /api/app-config returns defaults from sqlite-backed store', async () =
     assert.deepEqual(body.services.radarr, { url: '', apiKey: '', enabled: false });
     assert.deepEqual(body.services.plex, { url: '', apiKey: '', enabled: false });
     assert.deepEqual(body.qualityPreferences, {});
+    assert.deepEqual(body.mediaBrowserPreferences, {
+      movies: { viewMode: 'browse', sortBy: 'title-asc' },
+      tvShows: { viewMode: 'browse', sortBy: 'title-asc' },
+    });
   });
 });
 
@@ -115,6 +119,33 @@ test('PUT /api/app-config/poster-display persists poster display preferences int
     const body = await response.json();
 
     assert.deepEqual(body.posterDisplayPreferences, { hidePosters: true, posterSize: 'compact' });
+  });
+});
+
+test('PUT /api/app-config/media-browser-preferences persists browse-table view and sort preferences into sqlite', async () => {
+  const paths = createTempPaths();
+  writeFakeDist(paths.distPath);
+
+  const payload = {
+    movies: { viewMode: 'table', sortBy: 'year-desc' },
+    tvShows: { viewMode: 'browse', sortBy: 'episodes-desc' },
+  };
+
+  await withServer({ dbPath: paths.dbPath, distPath: paths.distPath }, async (baseUrl) => {
+    const saveResponse = await fetch(`${baseUrl}/api/app-config/media-browser-preferences`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    assert.equal(saveResponse.status, 200);
+  });
+
+  await withServer({ dbPath: paths.dbPath, distPath: paths.distPath }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/app-config`);
+    const body = await response.json();
+
+    assert.deepEqual(body.mediaBrowserPreferences, payload);
   });
 });
 

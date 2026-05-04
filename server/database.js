@@ -19,6 +19,11 @@ export const DEFAULT_POSTER_DISPLAY_PREFERENCES = {
   posterSize: 'default',
 };
 
+export const DEFAULT_MEDIA_BROWSER_PREFERENCES = {
+  movies: { viewMode: 'browse', sortBy: 'title-asc' },
+  tvShows: { viewMode: 'browse', sortBy: 'title-asc' },
+};
+
 export const DEFAULT_OPTIMIZATION_PREFERENCES = {
   strategy: 'balanced',
   targetContainer: 'mp4',
@@ -37,6 +42,7 @@ export const USER_ROLES = ['admin', 'operator', 'viewer'];
 
 const QUALITY_PREFERENCES_KEY = 'quality_preferences';
 const POSTER_DISPLAY_PREFERENCES_KEY = 'poster_display_preferences';
+const MEDIA_BROWSER_PREFERENCES_KEY = 'media_browser_preferences';
 const OPTIMIZATION_PREFERENCES_KEY = 'optimization_preferences';
 const TV_CLEANUP_PREFERENCES_KEY = 'tv_cleanup_preferences';
 const DEFAULT_ADMIN_USERNAME = 'admin';
@@ -60,6 +66,18 @@ const normalizePosterDisplayPreferences = (preferences = {}) => ({
   hidePosters: Boolean(preferences.hidePosters),
   posterSize: ['compact', 'default', 'large'].includes(preferences.posterSize) ? preferences.posterSize : 'default',
 });
+
+const normalizeMediaBrowserPreferences = (preferences = {}) => {
+  const normalizeSection = (value = {}, allowedSorts = []) => ({
+    viewMode: ['browse', 'table'].includes(value?.viewMode) ? value.viewMode : 'browse',
+    sortBy: allowedSorts.includes(value?.sortBy) ? value.sortBy : 'title-asc',
+  });
+
+  return {
+    movies: normalizeSection(preferences.movies, ['title-asc', 'title-desc', 'year-desc', 'year-asc', 'missing-first', 'downloaded-first']),
+    tvShows: normalizeSection(preferences.tvShows, ['title-asc', 'title-desc', 'year-desc', 'year-asc', 'continuing-first', 'episodes-desc']),
+  };
+};
 
 const normalizeOptimizationPreferences = (preferences = {}) => ({
   strategy: ['balanced', 'space', 'compatibility'].includes(preferences.strategy) ? preferences.strategy : 'balanced',
@@ -261,6 +279,9 @@ export const createConfigStore = ({ dbPath }) => {
         posterDisplayPreferences: normalizePosterDisplayPreferences(
           readJsonState(POSTER_DISPLAY_PREFERENCES_KEY, DEFAULT_POSTER_DISPLAY_PREFERENCES)
         ),
+        mediaBrowserPreferences: normalizeMediaBrowserPreferences(
+          readJsonState(MEDIA_BROWSER_PREFERENCES_KEY, DEFAULT_MEDIA_BROWSER_PREFERENCES)
+        ),
         optimizationPreferences: normalizeOptimizationPreferences(
           readJsonState(OPTIMIZATION_PREFERENCES_KEY, DEFAULT_OPTIMIZATION_PREFERENCES)
         ),
@@ -294,6 +315,12 @@ export const createConfigStore = ({ dbPath }) => {
     savePosterDisplayPreferences(preferences = {}) {
       const normalized = normalizePosterDisplayPreferences(preferences);
       upsertStateStmt.run(POSTER_DISPLAY_PREFERENCES_KEY, JSON.stringify(normalized));
+      return normalized;
+    },
+
+    saveMediaBrowserPreferences(preferences = {}) {
+      const normalized = normalizeMediaBrowserPreferences(preferences);
+      upsertStateStmt.run(MEDIA_BROWSER_PREFERENCES_KEY, JSON.stringify(normalized));
       return normalized;
     },
 

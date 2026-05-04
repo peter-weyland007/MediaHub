@@ -17,6 +17,29 @@ export const getServiceCacheKey = (serviceConfig) => ([
 
 const isReady = (serviceConfig) => Boolean(serviceConfig?.enabled && serviceConfig?.url && serviceConfig?.apiKey);
 
+const getQueueDownloadType = (record) => {
+  const rawProtocol = record?.downloadProtocol
+    || record?.protocol
+    || record?.trackedDownloadState?.protocol
+    || record?.downloadClientInfo?.protocol;
+
+  if (!rawProtocol) {
+    return null;
+  }
+
+  const normalized = String(rawProtocol).trim().toLowerCase();
+
+  if (normalized.includes('torrent')) {
+    return 'Torrent';
+  }
+
+  if (normalized.includes('usenet') || normalized.includes('nzb')) {
+    return 'Usenet';
+  }
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+};
+
 export async function fetchDashboardData(config) {
   const statuses = {};
   const stats = {};
@@ -46,6 +69,7 @@ export async function fetchDashboardData(config) {
             queue.push({
               title: record.title || record.movie?.title || 'Unknown',
               service: 'Radarr',
+              downloadType: getQueueDownloadType(record),
               status: record.status === 'completed' ? 'completed' : 'downloading',
               progress: record.sizeleft && record.size ? ((1 - record.sizeleft / record.size) * 100) : 0,
               size: record.size ? `${(record.size / 1073741824).toFixed(1)} GB` : null,
@@ -78,6 +102,7 @@ export async function fetchDashboardData(config) {
             queue.push({
               title: record.title || record.series?.title || 'Unknown',
               service: 'Sonarr',
+              downloadType: getQueueDownloadType(record),
               status: record.status === 'completed' ? 'completed' : 'downloading',
               progress: record.sizeleft && record.size ? ((1 - record.sizeleft / record.size) * 100) : 0,
               size: record.size ? `${(record.size / 1073741824).toFixed(1)} GB` : null,
@@ -287,7 +312,29 @@ export const fetchPlexLibraryLinksData = async (radarrConfig, sonarrConfig, rada
 
 export const fetchRequestsData = async (overseerrConfig) => {
   const requestsResponse = await overseerrApi.getRequests(overseerrConfig);
-  return requestsResponse?.results || [];
+  const requests = requestsResponse?.results || [];
+
+  const hydratedResults = await Promise.allSettled(requests.map(async (request) => {
+    const media = request?.media || {};
+    if (media?.title || media?.name || !media?.tmdbId) {
+      return request;
+    }
+
+    try {
+      const mediaDetails = request.type === 'tv'
+        ? await overseerrApi.getTvDetails(overseerrConfig, media.tmdbId)
+        : await overseerrApi.getMovieDetails(overseerrConfig, media.tmdbId);
+
+      return {
+        ...request,
+        mediaDetails,
+      };
+    } catch {
+      return request;
+    }
+  }));
+
+  return hydratedResults.map((result, index) => result.status === 'fulfilled' ? result.value : requests[index]);
 };
 
 export const fetchIndexersData = async (prowlarrConfig) => {

@@ -1,12 +1,14 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Bell, CheckCircle, XCircle, RefreshCw, Loader2, Clock, Film, Tv } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchRequestsData, getServiceCacheKey } from '@/lib/mediaQueries';
-import { overseerrApi } from '@/lib/serviceApi';
+import { overseerrApi, radarrApi, sonarrApi } from '@/lib/serviceApi';
+import { formatRequestHeadline, formatRequestMeta, getRequestDetailPath } from '@/lib/requestDisplay';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import { toast } from 'sonner';
@@ -21,6 +23,8 @@ const statusColors = {
 export default function Requests() {
   const { config, isServiceReady } = useServiceConfig();
   const ready = isServiceReady('overseerr');
+  const radarrReady = isServiceReady('radarr');
+  const sonarrReady = isServiceReady('sonarr');
   const serviceKey = getServiceCacheKey(config.overseerr);
 
   const {
@@ -33,6 +37,34 @@ export default function Requests() {
     queryFn: () => fetchRequestsData(config.overseerr),
     enabled: ready,
     staleTime: 30 * 1000,
+  });
+
+  const { data: requestRouteLookup = { movieLookup: new Map(), tvLookup: new Map() } } = useQuery({
+    queryKey: ['request-route-lookup', String(config.radarr?.url || ''), String(config.radarr?.enabled || false), String(config.sonarr?.url || ''), String(config.sonarr?.enabled || false)],
+    enabled: radarrReady || sonarrReady,
+    staleTime: 2 * 60 * 1000,
+    queryFn: async () => {
+      const [movies, series] = await Promise.all([
+        radarrReady ? radarrApi.getMovies(config.radarr) : Promise.resolve([]),
+        sonarrReady ? sonarrApi.getSeries(config.sonarr) : Promise.resolve([]),
+      ]);
+
+      return {
+        movieLookup: new Map((Array.isArray(movies) ? movies : []).map((movie) => [Number(movie.tmdbId), Number(movie.id)]).filter(([tmdbId, id]) => Number.isFinite(tmdbId) && Number.isFinite(id))),
+        tvLookup: new Map((Array.isArray(series) ? series : []).flatMap((show) => {
+          const entries = [];
+          const seriesId = Number(show.id);
+          if (!Number.isFinite(seriesId)) {
+            return entries;
+          }
+          const tvdbId = Number(show.tvdbId);
+          const tmdbId = Number(show.tmdbId);
+          if (Number.isFinite(tvdbId)) entries.push([tvdbId, seriesId]);
+          if (Number.isFinite(tmdbId)) entries.push([tmdbId, seriesId]);
+          return entries;
+        })),
+      };
+    },
   });
 
   const handleApprove = async (id) => {
@@ -78,6 +110,7 @@ export default function Requests() {
             const StatusIcon = statusConf.icon;
             const isMovie = req.type === 'movie';
             const posterPath = media.posterPath ? `https://image.tmdb.org/t/p/w92${media.posterPath}` : null;
+            const detailPath = getRequestDetailPath(req, requestRouteLookup.movieLookup, requestRouteLookup.tvLookup);
 
             return (
               <Card key={req.id} className="p-4">
@@ -89,15 +122,24 @@ export default function Requests() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       {isMovie ? <Film className="w-3.5 h-3.5 text-amber-400" /> : <Tv className="w-3.5 h-3.5 text-sky-400" />}
-                      <p className="font-semibold text-sm truncate">
-                        {media.title || media.name || `Request #${req.id}`}
-                      </p>
+                      {detailPath ? (
+                        <Link to={detailPath} className="font-semibold text-sm truncate text-foreground hover:underline" onClick={(event) => event.stopPropagation()}>
+                          {formatRequestHeadline(req)}
+                        </Link>
+                      ) : (
+                        <p className="font-semibold text-sm truncate">
+                          {formatRequestHeadline(req)}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className={cn('text-[10px]', statusConf.color)}>
                         <StatusIcon className="w-3 h-3 mr-1" />
                         {statusConf.label}
                       </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {formatRequestMeta(req)}
+                      </span>
                       <span className="text-xs text-muted-foreground">
                         by {req.requestedBy?.displayName || req.requestedBy?.email || 'Unknown'}
                       </span>

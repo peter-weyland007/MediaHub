@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Tv, Search, Plus, RefreshCw, Loader2 } from 'lucide-react';
+import { Tv, Search, Plus, RefreshCw, Loader2, LayoutGrid, Rows3, ArrowUpDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchTvReferenceData, fetchTvShowDetailsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import { sonarrApi } from '@/lib/serviceApi';
@@ -14,6 +15,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
 import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
 import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
+import { sortTvShowsForDisplay, tvSortOptions } from '@/lib/mediaBrowserPreferences';
 import { toast } from 'sonner';
 
 export default function TvShows() {
@@ -23,7 +25,9 @@ export default function TvShows() {
     config,
     qualityPreferences,
     posterDisplayPreferences,
+    mediaBrowserPreferences,
     updatePosterDisplayPreferences,
+    updateMediaBrowserPreferences,
     isServiceReady,
   } = useServiceConfig();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -36,6 +40,8 @@ export default function TvShows() {
 
   const ready = isServiceReady('sonarr');
   const serviceKey = getServiceCacheKey(config.sonarr);
+  const viewMode = mediaBrowserPreferences.tvShows.viewMode;
+  const sortBy = mediaBrowserPreferences.tvShows.sortBy;
 
   const {
     data: seriesData,
@@ -137,6 +143,8 @@ export default function TvShows() {
     return true;
   }), [series, filter]);
 
+  const sortedSeries = useMemo(() => sortTvShowsForDisplay(filteredSeries, sortBy), [filteredSeries, sortBy]);
+
   const getImage = (show) => {
     const poster = show.images?.find((image) => image.coverType === 'poster');
     if (poster?.remoteUrl) return poster.remoteUrl;
@@ -147,6 +155,33 @@ export default function TvShows() {
   const getProgress = (show) => {
     if (!show.statistics?.episodeFileCount || !show.statistics?.episodeCount) return null;
     return `${show.statistics.episodeFileCount}/${show.statistics.episodeCount}`;
+  };
+
+  const openSeriesDetails = (show) => {
+    queryClient.prefetchQuery({
+      queryKey: ['tv-show-details', ...serviceKey, String(show.id), String(config.tautulli?.url || ''), String(config.tautulli?.enabled || false)],
+      queryFn: () => fetchTvShowDetailsData(config.sonarr, config.tautulli, show.id, isServiceReady('tautulli')),
+      staleTime: 2 * 60 * 1000,
+    });
+    navigate(`/tv-shows/${show.id}`);
+  };
+
+  const saveTvBrowserPreferences = (nextSection) => updateMediaBrowserPreferences({
+    ...mediaBrowserPreferences,
+    tvShows: {
+      ...mediaBrowserPreferences.tvShows,
+      ...nextSection,
+    },
+  }).catch(() => {
+    toast.error('Failed to save TV view preferences');
+  });
+
+  const setTvViewMode = (nextViewMode) => saveTvBrowserPreferences({ viewMode: nextViewMode });
+  const setTvSortBy = (nextSortBy) => saveTvBrowserPreferences({ sortBy: nextSortBy });
+
+  const toggleTvSort = (column) => {
+    const nextSortBy = sortBy === `${column}-asc` ? `${column}-desc` : `${column}-asc`;
+    setTvSortBy(nextSortBy);
   };
 
   if (!ready) {
@@ -165,6 +200,20 @@ export default function TvShows() {
           posterDisplayPreferences={posterDisplayPreferences}
           onChange={updatePosterDisplayPreferences}
         />
+        <div className="inline-flex items-center rounded-md border border-border bg-background p-1">
+          <Button variant={viewMode === 'browse' ? 'secondary' : 'ghost'} size="sm" onClick={() => setTvViewMode('browse')}>
+            <LayoutGrid className="mr-2 h-4 w-4" />Browse
+          </Button>
+          <Button variant={viewMode === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setTvViewMode('table')}>
+            <Rows3 className="mr-2 h-4 w-4" />Table
+          </Button>
+        </div>
+        <Select value={sortBy} onValueChange={setTvSortBy}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {tvSortOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -186,9 +235,44 @@ export default function TvShows() {
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
+      ) : viewMode === 'table' ? (
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <Button variant="ghost" size="sm" className="-ml-3 h-8 px-3" onClick={() => toggleTvSort('title')}>
+                    Title <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" className="-ml-3 h-8 px-3" onClick={() => toggleTvSort('year')}>
+                    Year <ArrowUpDown className="ml-2 h-3.5 w-3.5" />
+                  </Button>
+                </TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Monitored</TableHead>
+                <TableHead>Network</TableHead>
+                <TableHead>Episodes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedSeries.map((show) => (
+                <TableRow key={show.id} className="cursor-pointer" onClick={() => openSeriesDetails(show)}>
+                  <TableCell className="font-medium">{show.title}</TableCell>
+                  <TableCell>{show.year || '—'}</TableCell>
+                  <TableCell>{show.status === 'continuing' ? 'Continuing' : 'Ended'}</TableCell>
+                  <TableCell>{show.monitored ? 'Yes' : 'No'}</TableCell>
+                  <TableCell>{show.network || '—'}</TableCell>
+                  <TableCell>{getProgress(show) || '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
         <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
-          {filteredSeries.map((show) => (
+          {sortedSeries.map((show) => (
             <MediaCard
               key={show.id}
               title={show.title}
@@ -199,14 +283,7 @@ export default function TvShows() {
               status={show.status === 'continuing' ? 'Continuing' : 'Ended'}
               statusColor={show.status === 'continuing' ? 'bg-sky-500/80 text-white' : 'bg-muted text-muted-foreground'}
               badges={show.network ? [show.network] : []}
-              onClick={() => {
-                queryClient.prefetchQuery({
-                  queryKey: ['tv-show-details', ...serviceKey, String(show.id), String(config.tautulli?.url || ''), String(config.tautulli?.enabled || false)],
-                  queryFn: () => fetchTvShowDetailsData(config.sonarr, config.tautulli, show.id, isServiceReady('tautulli')),
-                  staleTime: 2 * 60 * 1000,
-                });
-                navigate(`/tv-shows/${show.id}`);
-              }}
+              onClick={() => openSeriesDetails(show)}
             />
           ))}
         </div>

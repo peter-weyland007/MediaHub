@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appConfigApi } from '@/lib/appConfigApi';
+import { defaultMediaBrowserPreferences, normalizeMediaBrowserPreferences } from '@/lib/mediaBrowserPreferences';
 
 const defaultConfig = {
   radarr: { url: '', apiKey: '', enabled: false },
@@ -38,6 +39,7 @@ const normalizeAppConfig = (data = {}) => ({
   services: { ...defaultConfig, ...(data.services || {}) },
   qualityPreferences: data.qualityPreferences || {},
   posterDisplayPreferences: { ...defaultPosterDisplayPreferences, ...(data.posterDisplayPreferences || {}) },
+  mediaBrowserPreferences: normalizeMediaBrowserPreferences(data.mediaBrowserPreferences || defaultMediaBrowserPreferences),
   optimizationPreferences: { ...defaultOptimizationPreferences, ...(data.optimizationPreferences || {}) },
   tvCleanupPreferences: {
     ...defaultTvCleanupPreferences,
@@ -126,6 +128,24 @@ export function useServiceConfig() {
     }
   };
 
+  const updateMediaBrowserPreferences = async (nextPreferences) => {
+    const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
+    const normalized = normalizeMediaBrowserPreferences(nextPreferences);
+
+    setCachedAppConfig((current) => ({
+      ...current,
+      mediaBrowserPreferences: normalized,
+    }));
+
+    try {
+      await appConfigApi.updateMediaBrowserPreferences(normalized);
+    } catch (error) {
+      queryClient.setQueryData(APP_CONFIG_QUERY_KEY, previous);
+      console.error('Failed to save media browser preferences', error);
+      throw error;
+    }
+  };
+
   const updateOptimizationPreferences = async (nextPreferences) => {
     const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
     const normalized = { ...defaultOptimizationPreferences, ...nextPreferences };
@@ -178,6 +198,7 @@ export function useServiceConfig() {
     config: appConfig.services,
     qualityPreferences: appConfig.qualityPreferences,
     posterDisplayPreferences: appConfig.posterDisplayPreferences,
+    mediaBrowserPreferences: appConfig.mediaBrowserPreferences,
     optimizationPreferences: appConfig.optimizationPreferences,
     tvCleanupPreferences: appConfig.tvCleanupPreferences,
     isLoadingConfig: isLoading && !data,
@@ -185,6 +206,7 @@ export function useServiceConfig() {
     updateService,
     updateQualityPreferences,
     updatePosterDisplayPreferences,
+    updateMediaBrowserPreferences,
     updateOptimizationPreferences,
     updateTvCleanupPreferences,
     getService,

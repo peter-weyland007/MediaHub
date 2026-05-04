@@ -42,6 +42,16 @@ export const appConfigApi = {
     return handleJsonResponse(response);
   },
 
+  async updateMediaBrowserPreferences(mediaBrowserPreferences) {
+    const response = await fetch('/api/app-config/media-browser-preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mediaBrowserPreferences),
+    });
+
+    return handleJsonResponse(response);
+  },
+
   async updateOptimizationPreferences(optimizationPreferences) {
     const response = await fetch('/api/app-config/optimization-preferences', {
       method: 'PUT',

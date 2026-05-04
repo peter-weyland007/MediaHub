@@ -192,6 +192,7 @@ export const plexApi = {
 export const prowlarrApi = {
   ...createServiceClient({ service: 'prowlarr', serviceName: 'Prowlarr' }),
   getIndexers: (config) => prowlarrApi.get(config, '/indexer'),
+  updateIndexer: (config, id, indexer) => prowlarrApi.put(config, `/indexer/${id}`, indexer),
   getIndexerStatus: (config) => prowlarrApi.get(config, '/indexerstatus'),
   getSystemStatus: (config) => prowlarrApi.get(config, '/system/status'),
 };

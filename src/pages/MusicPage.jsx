@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Music, RefreshCw, Loader2, LayoutGrid, Rows3, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useServiceConfig } from '@/lib/useServiceConfig';
@@ -11,12 +12,14 @@ import MediaCard from '@/components/shared/MediaCard';
 import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
 import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
 import { musicSortOptions, sortMusicArtistsForDisplay } from '@/lib/mediaBrowserPreferences';
+import { filterMusicArtistsForDisplay } from '@/lib/mediaSearch';
 
 export default function MusicPage() {
   const { config, posterDisplayPreferences, mediaBrowserPreferences, updatePosterDisplayPreferences, updateMediaBrowserPreferences, isServiceReady } = useServiceConfig();
   const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [librarySearchTerm, setLibrarySearchTerm] = useState('');
 
   const ready = isServiceReady('lidarr');
   const viewMode = mediaBrowserPreferences.music.viewMode;
@@ -38,13 +41,14 @@ export default function MusicPage() {
     }
   }, [ready]);
 
-  const filteredArtists = artists.filter(a => {
-    if (filter === 'monitored') return a.monitored;
-    if (filter === 'unmonitored') return !a.monitored;
+  const filteredArtists = useMemo(() => artists.filter((artist) => {
+    if (filter === 'monitored') return artist.monitored;
+    if (filter === 'unmonitored') return !artist.monitored;
     return true;
-  });
+  }), [artists, filter]);
 
-  const sortedArtists = useMemo(() => sortMusicArtistsForDisplay(filteredArtists, sortBy), [filteredArtists, sortBy]);
+  const searchedArtists = useMemo(() => filterMusicArtistsForDisplay(filteredArtists, librarySearchTerm), [filteredArtists, librarySearchTerm]);
+  const sortedArtists = useMemo(() => sortMusicArtistsForDisplay(searchedArtists, sortBy), [searchedArtists, sortBy]);
 
   if (!ready) {
     return (
@@ -87,6 +91,12 @@ export default function MusicPage() {
             <Rows3 className="mr-2 h-4 w-4" />Table
           </Button>
         </div>
+        <Input
+          value={librarySearchTerm}
+          onChange={(event) => setLibrarySearchTerm(event.target.value)}
+          placeholder="Search library..."
+          className="w-52"
+        />
         <Select value={sortBy} onValueChange={(value) => saveMusicBrowserPreferences({ sortBy: value })}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>

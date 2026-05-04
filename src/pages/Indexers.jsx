@@ -1,17 +1,21 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, RefreshCw, Loader2, CheckCircle, XCircle, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchIndexersData, getServiceCacheKey } from '@/lib/mediaQueries';
+import { prowlarrApi } from '@/lib/serviceApi';
+import { buildProtocolPreferencePriorityUpdates, getProtocolPreferenceState } from '@/lib/indexerPriority';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export default function Indexers() {
   const { config, isServiceReady } = useServiceConfig();
+  const queryClient = useQueryClient();
   const ready = isServiceReady('prowlarr');
   const serviceKey = getServiceCacheKey(config.prowlarr);
 
@@ -27,6 +31,40 @@ export default function Indexers() {
     staleTime: 60 * 1000,
   });
 
+  const protocolPreference = getProtocolPreferenceState(indexers);
+
+  const applyProtocolPreference = async (preferredProtocol) => {
+    const updates = buildProtocolPreferencePriorityUpdates(indexers, preferredProtocol);
+
+    if (!updates.length) {
+      toast.error('No enabled indexers available to reprioritize');
+      return;
+    }
+
+    try {
+      const results = await Promise.allSettled(
+        updates.map((indexer) => prowlarrApi.updateIndexer(config.prowlarr, indexer.id, indexer))
+      );
+      const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+      const failed = results.length - succeeded;
+
+      if (succeeded && failed) {
+        toast.success(`${succeeded} indexers updated. ${failed} could not be reprioritized because Prowlarr validation failed.`);
+      } else if (succeeded) {
+        toast.success(preferredProtocol === 'usenet' ? 'Usenet indexers moved above torrent indexers' : 'Torrent indexers moved above usenet indexers');
+      } else {
+        toast.error('Prowlarr rejected every indexer update. Check blocked or failing indexers.');
+      }
+
+      await Promise.all([
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: ['indexers'] }),
+      ]);
+    } catch (error) {
+      toast.error(`Failed to update indexer priorities: ${error.message}`);
+    }
+  };
+
   if (!ready) {
     return (
       <div>
@@ -39,6 +77,15 @@ export default function Indexers() {
   return (
     <div>
       <PageHeader title="Indexers" subtitle={`${indexers.length} indexers configured`} icon={Search} accentColor="bg-rose-500/10">
+        <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Protocol preference:</span> {protocolPreference.label}
+        </div>
+        <Button size="sm" onClick={() => applyProtocolPreference('usenet')} disabled={isFetching || isPending || protocolPreference.preferredProtocol === 'usenet'}>
+          Prefer Usenet
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => applyProtocolPreference('torrent')} disabled={isFetching || isPending || protocolPreference.preferredProtocol === 'torrent'}>
+          Prefer Torrent
+        </Button>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         </Button>
@@ -62,7 +109,7 @@ export default function Indexers() {
                   </div>
                   <div>
                     <p className="font-semibold text-sm">{indexer.name}</p>
-                    <p className="text-xs text-muted-foreground">{indexer.protocol || 'Unknown protocol'}</p>
+                    <p className="text-xs text-muted-foreground">{indexer.protocol || 'Unknown protocol'} • priority {indexer.priority ?? '—'}</p>
                   </div>
                 </div>
                 {indexer.enable ? (

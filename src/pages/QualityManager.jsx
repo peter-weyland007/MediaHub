@@ -9,6 +9,7 @@ import { radarrApi, sonarrApi, tautulliApi } from '@/lib/serviceApi';
 import {
   buildOptimizationQualityProfilePayload,
   getOptimizationRecommendation,
+  isOptimizationCandidate,
   MEDIA_NEXUS_OPTIMIZATION_PROFILE_NAME,
 } from '@/lib/qualityUtils';
 import PageHeader from '@/components/shared/PageHeader';
@@ -158,7 +159,7 @@ export default function QualityManager() {
   const movieProfileObj = radarrProfiles.find((p) => String(p.id) === String(qualityPrefs.movieProfileId));
   const tvProfileObj = sonarrProfiles.find((p) => String(p.id) === String(qualityPrefs.tvProfileId));
 
-  const enrichedMovies = movies.map((movie) => {
+  const enrichedMovies = movies.filter((movie) => isOptimizationCandidate(movie, 'movie')).map((movie) => {
     const currentQuality = movie.movieFile?.quality?.quality?.name || 'No file';
     const preferredProfile = movieProfileObj?.name || 'Not set';
     const remediation = getOptimizationRecommendation({
@@ -176,7 +177,7 @@ export default function QualityManager() {
     };
   });
 
-  const enrichedSeries = series.map((show) => {
+  const enrichedSeries = series.filter((show) => isOptimizationCandidate(show, 'tv')).map((show) => {
     const assignedProfile = sonarrProfiles.find((p) => p.id === show.qualityProfileId);
     const currentQuality = assignedProfile?.name || 'Unknown';
     const preferredProfile = tvProfileObj?.name || 'Not set';

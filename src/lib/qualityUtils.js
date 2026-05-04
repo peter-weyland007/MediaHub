@@ -254,6 +254,18 @@ const toGiB = (bytes = 0) => bytes / (1024 ** 3);
 
 const compactIssue = (label, severity = 'minor') => ({ label, severity });
 
+export function isOptimizationCandidate(item = {}, type = 'movie') {
+  if (!item || item.monitored === false) {
+    return false;
+  }
+
+  if (type === 'movie') {
+    return true;
+  }
+
+  return true;
+}
+
 export function getOptimizationRecommendation(item, optimizationPreferences = {}, type = 'movie') {
   const strategy = optimizationPreferences.strategy || 'balanced';
   const targetContainer = optimizationPreferences.targetContainer || 'mp4';

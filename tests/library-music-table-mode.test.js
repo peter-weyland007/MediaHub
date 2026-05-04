@@ -66,3 +66,10 @@ test('Library and Music pages support saved browse-table toggles and table layou
     assert.match(source, /TableRow/);
   }
 });
+
+test('Music page exposes a visible library search input wired into display filtering', () => {
+  const source = read('src/pages/MusicPage.jsx');
+  assert.match(source, /Search library\.\.\./);
+  assert.match(source, /librarySearchTerm/);
+  assert.match(source, /filterMusicArtistsForDisplay/);
+});

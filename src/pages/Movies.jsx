@@ -16,6 +16,7 @@ import MediaCard from '@/components/shared/MediaCard';
 import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
 import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
 import { movieSortOptions, sortMoviesForDisplay } from '@/lib/mediaBrowserPreferences';
+import { filterMoviesForDisplay } from '@/lib/mediaSearch';
 import { toast } from 'sonner';
 
 export default function Movies() {
@@ -37,6 +38,7 @@ export default function Movies() {
   const [selectedRoot, setSelectedRoot] = useState('');
   const [selectedQuality, setSelectedQuality] = useState('');
   const [filter, setFilter] = useState('all');
+  const [librarySearchTerm, setLibrarySearchTerm] = useState('');
 
   const ready = isServiceReady('radarr');
   const serviceKey = getServiceCacheKey(config.radarr);
@@ -153,7 +155,8 @@ export default function Movies() {
     return true;
   }), [movies, filter]);
 
-  const sortedMovies = useMemo(() => sortMoviesForDisplay(filteredMovies, sortBy), [filteredMovies, sortBy]);
+  const searchedMovies = useMemo(() => filterMoviesForDisplay(filteredMovies, librarySearchTerm), [filteredMovies, librarySearchTerm]);
+  const sortedMovies = useMemo(() => sortMoviesForDisplay(searchedMovies, sortBy), [searchedMovies, sortBy]);
 
   const getImage = (movie) => {
     const poster = movie.images?.find((image) => image.coverType === 'poster');
@@ -220,6 +223,12 @@ export default function Movies() {
             <Rows3 className="mr-2 h-4 w-4" />Table
           </Button>
         </div>
+        <Input
+          value={librarySearchTerm}
+          onChange={(event) => setLibrarySearchTerm(event.target.value)}
+          placeholder="Search library..."
+          className="w-52"
+        />
         <Select value={sortBy} onValueChange={setMovieSortBy}>
           <SelectTrigger className="w-44">
             <SelectValue />

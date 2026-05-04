@@ -36,3 +36,17 @@ test('Movies and TV pages support a saved browse-table toggle plus sortable tabl
     assert.match(source, /TableRow/);
   }
 });
+
+test('Movies and TV pages expose a visible library search input wired into display filtering', () => {
+  const expectations = [
+    ['src/pages/Movies.jsx', /Search library\.\.\./, /librarySearchTerm/, /filterMoviesForDisplay/],
+    ['src/pages/TvShows.jsx', /Search library\.\.\./, /librarySearchTerm/, /filterTvShowsForDisplay/],
+  ];
+
+  for (const [relativePath, placeholderPattern, statePattern, helperPattern] of expectations) {
+    const source = read(relativePath);
+    assert.match(source, placeholderPattern);
+    assert.match(source, statePattern);
+    assert.match(source, helperPattern);
+  }
+});

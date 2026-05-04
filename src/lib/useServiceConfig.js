@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { appConfigApi } from '@/lib/appConfigApi';
 
 const defaultConfig = {
@@ -32,124 +32,156 @@ const defaultTvCleanupPreferences = {
   manualOverrides: {},
 };
 
+const APP_CONFIG_QUERY_KEY = ['app-config'];
+
+const normalizeAppConfig = (data = {}) => ({
+  services: { ...defaultConfig, ...(data.services || {}) },
+  qualityPreferences: data.qualityPreferences || {},
+  posterDisplayPreferences: { ...defaultPosterDisplayPreferences, ...(data.posterDisplayPreferences || {}) },
+  optimizationPreferences: { ...defaultOptimizationPreferences, ...(data.optimizationPreferences || {}) },
+  tvCleanupPreferences: {
+    ...defaultTvCleanupPreferences,
+    ...(data.tvCleanupPreferences || {}),
+    shows: data.tvCleanupPreferences?.shows || {},
+    manualOverrides: data.tvCleanupPreferences?.manualOverrides || {},
+  },
+});
+
+const getDefaultAppConfig = () => normalizeAppConfig();
+
 export function useServiceConfig() {
-  const [config, setConfig] = useState(defaultConfig);
-  const [qualityPreferences, setQualityPreferences] = useState({});
-  const [posterDisplayPreferences, setPosterDisplayPreferences] = useState(defaultPosterDisplayPreferences);
-  const [optimizationPreferences, setOptimizationPreferences] = useState(defaultOptimizationPreferences);
-  const [tvCleanupPreferences, setTvCleanupPreferences] = useState(defaultTvCleanupPreferences);
-  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const queryClient = useQueryClient();
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: APP_CONFIG_QUERY_KEY,
+    queryFn: async () => normalizeAppConfig(await appConfigApi.getConfig()),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
+  const appConfig = data || getDefaultAppConfig();
 
-    const loadConfig = async () => {
-      try {
-        const data = await appConfigApi.getConfig();
-        if (cancelled) {
-          return;
-        }
+  const setCachedAppConfig = (updater) => {
+    queryClient.setQueryData(APP_CONFIG_QUERY_KEY, (current) => {
+      const base = current || getDefaultAppConfig();
+      const next = typeof updater === 'function' ? updater(base) : updater;
+      return normalizeAppConfig(next);
+    });
+  };
 
-        setConfig({ ...defaultConfig, ...(data.services || {}) });
-        setQualityPreferences(data.qualityPreferences || {});
-        setPosterDisplayPreferences({ ...defaultPosterDisplayPreferences, ...(data.posterDisplayPreferences || {}) });
-        setOptimizationPreferences({ ...defaultOptimizationPreferences, ...(data.optimizationPreferences || {}) });
-        setTvCleanupPreferences({ ...defaultTvCleanupPreferences, ...(data.tvCleanupPreferences || {}), shows: data.tvCleanupPreferences?.shows || {} });
-      } catch (error) {
-        console.error('Failed to load app config', error);
-      } finally {
-        if (!cancelled) {
-          setIsLoadingConfig(false);
-        }
-      }
-    };
-
-    loadConfig();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const updateService = async (service, data) => {
+  const updateService = async (service, nextData) => {
+    const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
     const next = {
-      ...config[service],
-      ...data,
+      ...appConfig.services[service],
+      ...nextData,
     };
 
-    setConfig((prev) => ({
-      ...prev,
-      [service]: next,
+    setCachedAppConfig((current) => ({
+      ...current,
+      services: {
+        ...current.services,
+        [service]: next,
+      },
     }));
 
     try {
       await appConfigApi.updateService(service, next);
     } catch (error) {
+      queryClient.setQueryData(APP_CONFIG_QUERY_KEY, previous);
       console.error(`Failed to save config for ${service}`, error);
       throw error;
     }
   };
 
   const updateQualityPreferences = async (nextPreferences) => {
-    setQualityPreferences(nextPreferences);
+    const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
+
+    setCachedAppConfig((current) => ({
+      ...current,
+      qualityPreferences: nextPreferences,
+    }));
 
     try {
       await appConfigApi.updateQualityPreferences(nextPreferences);
     } catch (error) {
+      queryClient.setQueryData(APP_CONFIG_QUERY_KEY, previous);
       console.error('Failed to save quality preferences', error);
       throw error;
     }
   };
 
   const updatePosterDisplayPreferences = async (nextPreferences) => {
+    const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
     const normalized = { ...defaultPosterDisplayPreferences, ...nextPreferences };
-    setPosterDisplayPreferences(normalized);
+
+    setCachedAppConfig((current) => ({
+      ...current,
+      posterDisplayPreferences: normalized,
+    }));
 
     try {
       await appConfigApi.updatePosterDisplayPreferences(normalized);
     } catch (error) {
+      queryClient.setQueryData(APP_CONFIG_QUERY_KEY, previous);
       console.error('Failed to save poster display preferences', error);
       throw error;
     }
   };
 
   const updateOptimizationPreferences = async (nextPreferences) => {
+    const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
     const normalized = { ...defaultOptimizationPreferences, ...nextPreferences };
-    setOptimizationPreferences(normalized);
+
+    setCachedAppConfig((current) => ({
+      ...current,
+      optimizationPreferences: normalized,
+    }));
 
     try {
       await appConfigApi.updateOptimizationPreferences(normalized);
     } catch (error) {
+      queryClient.setQueryData(APP_CONFIG_QUERY_KEY, previous);
       console.error('Failed to save optimization preferences', error);
       throw error;
     }
   };
 
   const updateTvCleanupPreferences = async (nextPreferences) => {
-    const normalized = { ...defaultTvCleanupPreferences, ...nextPreferences, shows: nextPreferences?.shows || {} };
-    setTvCleanupPreferences(normalized);
+    const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
+    const normalized = {
+      ...defaultTvCleanupPreferences,
+      ...nextPreferences,
+      shows: nextPreferences?.shows || {},
+      manualOverrides: nextPreferences?.manualOverrides || {},
+    };
+
+    setCachedAppConfig((current) => ({
+      ...current,
+      tvCleanupPreferences: normalized,
+    }));
 
     try {
       await appConfigApi.updateTvCleanupPreferences(normalized);
     } catch (error) {
+      queryClient.setQueryData(APP_CONFIG_QUERY_KEY, previous);
       console.error('Failed to save TV cleanup preferences', error);
       throw error;
     }
   };
 
-  const getService = (service) => config[service];
+  const getService = (service) => appConfig.services[service];
 
   const isServiceReady = (service) => {
-    const s = config[service];
-    return s && s.enabled && s.url && s.apiKey;
+    const current = appConfig.services[service];
+    return Boolean(current && current.enabled && current.url && current.apiKey);
   };
 
   return {
-    config,
-    qualityPreferences,
-    posterDisplayPreferences,
-    optimizationPreferences,
-    tvCleanupPreferences,
-    isLoadingConfig,
+    config: appConfig.services,
+    qualityPreferences: appConfig.qualityPreferences,
+    posterDisplayPreferences: appConfig.posterDisplayPreferences,
+    optimizationPreferences: appConfig.optimizationPreferences,
+    tvCleanupPreferences: appConfig.tvCleanupPreferences,
+    isLoadingConfig: isLoading && !data,
+    isFetchingConfig: isFetching,
     updateService,
     updateQualityPreferences,
     updatePosterDisplayPreferences,

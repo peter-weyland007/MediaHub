@@ -102,9 +102,10 @@ test('App routes and media library pages wire up shared movie and TV details exp
   assert.match(appSource, /path="\/tv-shows\/:id" element={<TvShowDetails \/>}/);
   assert.match(moviesSource, /useNavigate/);
   assert.match(moviesSource, /navigate\(`\/movies\/\$\{movie\.id\}`\)/);
-  assert.match(moviesSource, /onClick=\{\(\) => navigate\(`\/movies\/\$\{movie\.id\}`\)\}/);
+  assert.match(moviesSource, /prefetchQuery/);
   assert.match(tvShowsSource, /useNavigate/);
-  assert.match(tvShowsSource, /navigate\(`\/tv-shows\/\$\{show\.id\}`\)\}/);
+  assert.match(tvShowsSource, /navigate\(`\/tv-shows\/\$\{show\.id\}`\)/);
+  assert.match(tvShowsSource, /prefetchQuery/);
 });
 
 test('Library page wires movie and show items into shared details routes and toasts on unmatched items', () => {
@@ -112,13 +113,13 @@ test('Library page wires movie and show items into shared details routes and toa
 
   assert.match(source, /useNavigate/);
   assert.match(source, /import \{ toast \} from 'sonner';/);
-  assert.match(source, /radarrApi\.getMovies\(config\.radarr\)/);
-  assert.match(source, /sonarrApi\.getSeries\(config\.sonarr\)/);
+  assert.match(source, /fetchPlexLibraryLinksData/);
   assert.match(source, /resolveLibraryItemDetailsPath/);
   assert.match(source, /resolveLibrarySeriesDetailsPath/);
   assert.match(source, /onClick=\{\(\) => handleItemClick\(item\)\}/);
   assert.match(source, /toast\('No linked details available for this item yet\.'/);
   assert.match(source, /navigate\(detailsPath\)/);
+  assert.match(source, /prefetchQuery/);
 });
 
 test('movie details and TV details pages load service metadata and render their key sections plus source links', () => {
@@ -128,8 +129,8 @@ test('movie details and TV details pages load service metadata and render their 
   const episodeSource = read('src/pages/TvEpisodeDetails.jsx');
 
   assert.match(movieSource, /useParams/);
-  assert.match(movieSource, /radarrApi\.getMovie\(config\.radarr, id\)/);
-  assert.match(movieSource, /radarrApi\.getMovieFiles\(config\.radarr, id\)/);
+  assert.match(movieSource, /useQuery/);
+  assert.match(movieSource, /fetchMovieDetailsData\(config\.radarr, id\)/);
   assert.match(movieSource, /buildMovieExternalLinks/);
   assert.match(movieSource, /About this movie/);
   assert.match(movieSource, /Ratings/);
@@ -139,8 +140,8 @@ test('movie details and TV details pages load service metadata and render their 
   assert.match(movieSource, /TMDb/);
 
   assert.match(tvSource, /useParams/);
-  assert.match(tvSource, /sonarrApi\.getSeriesById\(config\.sonarr, id\)/);
-  assert.match(tvSource, /sonarrApi\.getEpisodeFiles\(config\.sonarr, id\)/);
+  assert.match(tvSource, /useQuery/);
+  assert.match(tvSource, /fetchTvShowDetailsData\(config\.sonarr, config\.tautulli, id, tautulliReady\)/);
   assert.match(tvSource, /navigate\(`\/tv-shows\/\$\{id\}\/seasons\/\$\{season\.seasonNumber\}`\)/);
   assert.match(tvSource, /Season guide/);
   assert.match(tvSource, /Open episodes/);
@@ -151,15 +152,14 @@ test('movie details and TV details pages load service metadata and render their 
   assert.match(tvSource, /IMDb/);
   assert.match(tvSource, /TVDb/);
 
-  assert.match(seasonSource, /sonarrApi\.getEpisodes\(config\.sonarr, seriesId\)/);
-  assert.match(seasonSource, /sonarrApi\.getEpisodeFiles\(config\.sonarr, seriesId\)/);
+  assert.match(seasonSource, /useQuery/);
+  assert.match(seasonSource, /fetchTvShowDetailsData\(config\.sonarr, config\.tautulli, seriesId, tautulliReady\)/);
   assert.match(seasonSource, /Season episodes/);
   assert.match(seasonSource, /Download status/);
   assert.match(seasonSource, /onClick=\{\(\) => navigate\(`\/tv-shows\/\$\{seriesId\}\/episodes\/\$\{episode\.id\}`\)\}/);
 
-  assert.match(episodeSource, /sonarrApi\.getSeriesById\(config\.sonarr, seriesId\)/);
-  assert.match(episodeSource, /sonarrApi\.getEpisodes\(config\.sonarr, seriesId\)/);
-  assert.match(episodeSource, /sonarrApi\.getEpisodeFiles\(config\.sonarr, seriesId\)/);
+  assert.match(episodeSource, /useQuery/);
+  assert.match(episodeSource, /fetchTvShowDetailsData\(config\.sonarr, config\.tautulli, seriesId, tautulliReady\)/);
   assert.match(episodeSource, /Episode summary/);
   assert.match(episodeSource, /File details/);
   assert.match(episodeSource, /Subtitles/);

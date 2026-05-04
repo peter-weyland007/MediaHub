@@ -166,12 +166,12 @@ test('TV watched cleanup source wiring persists preferences and exposes Tautulli
   assert.match(seasonSource, /Watched/);
   assert.match(seasonSource, /Eligible/);
   assert.match(seasonSource, /Apply cleanup/);
-  assert.match(seasonSource, /toast\.success\(`Applied cleanup: \$\{label\} → \$\{cleanupActionLabel\}`\)/);
+  assert.match(seasonSource, /toast\.success\(`Applied cleanup: \$\{getEpisodeLabel\(episode\)\} → \$\{cleanupActionLabel\}`\)/);
 
   assert.match(episodeSource, /manualOverrides/);
   assert.match(episodeSource, /Mark watched manually/);
   assert.match(episodeSource, /Clear manual override/);
   assert.match(episodeSource, /watchSource/);
-  assert.match(episodeSource, /toast\.success\(`Saved manual watched override: \$\{overrideLabel\}`\)/);
+  assert.match(episodeSource, /toast\.success\(`Saved manual watched override: \$\{watched \? 'watched' : 'cleared'\}`\)/);
   assert.match(episodeSource, /toast\.success\(`Saved episode cleanup: \$\{cleanupActionLabel\}`\)/);
 });

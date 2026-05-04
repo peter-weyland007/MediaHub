@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ExternalLink, Film, Loader2 } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, ExternalLink, Film, Loader2, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useServiceConfig } from '@/lib/useServiceConfig';
-import { radarrApi } from '@/lib/serviceApi';
+import { fetchMovieDetailsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import EmptyState from '@/components/shared/EmptyState';
 import PageHeader from '@/components/shared/PageHeader';
 import {
@@ -33,52 +34,21 @@ export default function MovieDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { config, isServiceReady } = useServiceConfig();
-  const [movie, setMovie] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   const ready = isServiceReady('radarr');
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadMovie = async () => {
-      if (!ready || !id) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError('');
-
-      try {
-        const movieData = await radarrApi.getMovie(config.radarr, id);
-        const files = await radarrApi.getMovieFiles(config.radarr, id);
-        const mergedMovie = {
-          ...movieData,
-          movieFile: Array.isArray(files) && files.length > 0 ? files[0] : movieData.movieFile,
-        };
-
-        if (!cancelled) {
-          setMovie(mergedMovie);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError.message || 'Failed to load movie details');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadMovie();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [config.radarr, id, ready]);
+  const serviceKey = getServiceCacheKey(config.radarr);
+  const {
+    data: movie,
+    isPending,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['movie-details', ...serviceKey, String(id || '')],
+    queryFn: () => fetchMovieDetailsData(config.radarr, id),
+    enabled: ready && Boolean(id),
+    staleTime: 2 * 60 * 1000,
+  });
 
   const links = useMemo(() => buildMovieExternalLinks(movie || {}, config.radarr || {}), [movie, config.radarr]);
   const posterImage = useMemo(() => getPrimaryMovieImage(movie || {}, config.radarr || {}), [movie, config.radarr]);
@@ -94,7 +64,7 @@ export default function MovieDetails() {
     );
   }
 
-  if (loading) {
+  if (isPending && !movie) {
     return (
       <div>
         <PageHeader title="Movie details" subtitle="Loading movie metadata" icon={Film} accentColor="bg-amber-500/10">
@@ -117,7 +87,7 @@ export default function MovieDetails() {
             <ArrowLeft className="mr-2 h-4 w-4" />Back to Movies
           </Button>
         </PageHeader>
-        <EmptyState icon={Film} title="Movie not available" description={error || 'That movie could not be found in Radarr.'} showSettings={false} />
+        <EmptyState icon={Film} title="Movie not available" description={error?.message || 'That movie could not be found in Radarr.'} showSettings={false} />
       </div>
     );
   }
@@ -127,6 +97,9 @@ export default function MovieDetails() {
       <PageHeader title={movie.title} subtitle={`${movie.year || 'Unknown year'} • ${formatMovieRuntime(movie.runtime)}`} icon={Film} accentColor="bg-amber-500/10">
         <Button variant="outline" size="sm" onClick={() => navigate('/movies')}>
           <ArrowLeft className="mr-2 h-4 w-4" />Back to Movies
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />Refresh
         </Button>
         {links.radarr && (
           <a href={links.radarr} target="_blank" rel="noreferrer">

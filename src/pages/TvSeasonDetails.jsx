@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Loader2, Tv } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, Loader2, RefreshCw, Tv } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useServiceConfig } from '@/lib/useServiceConfig';
-import { sonarrApi, tautulliApi } from '@/lib/serviceApi';
+import { fetchTvShowDetailsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import EmptyState from '@/components/shared/EmptyState';
 import PageHeader from '@/components/shared/PageHeader';
 import {
@@ -28,73 +29,36 @@ export default function TvSeasonDetails() {
   const navigate = useNavigate();
   const { id: seriesId, seasonNumber } = useParams();
   const { config, isServiceReady, tvCleanupPreferences } = useServiceConfig();
-  const [series, setSeries] = useState(null);
-  const [episodes, setEpisodes] = useState([]);
-  const [episodeFiles, setEpisodeFiles] = useState([]);
-  const [historyRows, setHistoryRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [refreshToken, setRefreshToken] = useState(0);
   const [actioningId, setActioningId] = useState(null);
 
   const ready = isServiceReady('sonarr');
   const tautulliReady = isServiceReady('tautulli');
   const numericSeasonNumber = Number(seasonNumber || 0);
+  const sonarrKey = getServiceCacheKey(config.sonarr);
+  const tautulliKey = getServiceCacheKey(config.tautulli);
 
-  useEffect(() => {
-    let cancelled = false;
+  const {
+    data,
+    isPending,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['tv-season-details', ...sonarrKey, String(seriesId || ''), String(numericSeasonNumber), ...tautulliKey, tautulliReady ? 'history' : 'no-history'],
+    queryFn: () => fetchTvShowDetailsData(config.sonarr, config.tautulli, seriesId, tautulliReady),
+    enabled: ready && Boolean(seriesId),
+    staleTime: 2 * 60 * 1000,
+  });
 
-    const loadSeason = async () => {
-      if (!ready || !seriesId) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError('');
-
-      try {
-        const requests = [
-          sonarrApi.getSeriesById(config.sonarr, seriesId),
-          sonarrApi.getEpisodes(config.sonarr, seriesId),
-          sonarrApi.getEpisodeFiles(config.sonarr, seriesId),
-        ];
-        if (tautulliReady) {
-          requests.push(tautulliApi.getHistory(config.tautulli, { media_type: 'episode', length: '500' }));
-        }
-
-        const [seriesData, allEpisodes, allEpisodeFiles, history = []] = await Promise.all(requests);
-
-        if (!cancelled) {
-          setSeries(seriesData);
-          setEpisodes(Array.isArray(allEpisodes) ? allEpisodes : []);
-          setEpisodeFiles(Array.isArray(allEpisodeFiles) ? allEpisodeFiles : []);
-          setHistoryRows(Array.isArray(history) ? history : []);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError.message || 'Failed to load season details');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadSeason();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [config.sonarr, config.tautulli, ready, seriesId, tautulliReady, refreshToken]);
+  const series = data?.series || null;
+  const episodes = data?.episodes || [];
+  const episodeFiles = data?.episodeFiles || [];
+  const historyRows = data?.historyRows || [];
 
   const fileMap = useMemo(() => new Map(episodeFiles.map((file) => [Number(file.id), file])), [episodeFiles]);
-  const seasonEpisodes = useMemo(() => {
-    return episodes
-      .filter((episode) => Number(episode.seasonNumber || 0) === numericSeasonNumber)
-      .sort((left, right) => Number(left.episodeNumber || 0) - Number(right.episodeNumber || 0));
-  }, [episodes, numericSeasonNumber]);
+  const seasonEpisodes = useMemo(() => episodes
+    .filter((episode) => Number(episode.seasonNumber || 0) === numericSeasonNumber)
+    .sort((left, right) => Number(left.episodeNumber || 0) - Number(right.episodeNumber || 0)), [episodes, numericSeasonNumber]);
   const cleanupSummary = useMemo(() => buildShowCleanupSummary({
     series,
     episodes: seasonEpisodes,
@@ -117,9 +81,8 @@ export default function TvSeasonDetails() {
     try {
       await runEpisodeCleanupAction({ sonarrConfig: config.sonarr, episode, mode: cleanupSummary.policyMode });
       const cleanupActionLabel = cleanupSummary.policyMode === 'delete-unmonitor' ? 'Delete file + unmonitor' : 'Unmonitor only';
-      const label = getEpisodeLabel(episode);
-      toast.success(`Applied cleanup: ${label} → ${cleanupActionLabel}`);
-      setRefreshToken((value) => value + 1);
+      toast.success(`Applied cleanup: ${getEpisodeLabel(episode)} → ${cleanupActionLabel}`);
+      await refetch();
     } catch (actionError) {
       toast.error(actionError.message || 'Failed to clean up episode');
     } finally {
@@ -136,7 +99,7 @@ export default function TvSeasonDetails() {
     );
   }
 
-  if (loading) {
+  if (isPending && !data) {
     return (
       <div>
         <PageHeader title="Season details" subtitle="Loading episode list" icon={Tv} accentColor="bg-sky-500/10">
@@ -159,7 +122,7 @@ export default function TvSeasonDetails() {
             <ArrowLeft className="mr-2 h-4 w-4" />Back to TV Shows
           </Button>
         </PageHeader>
-        <EmptyState icon={Tv} title="Season not available" description={error || 'That season could not be loaded from Sonarr.'} showSettings={false} />
+        <EmptyState icon={Tv} title="Season not available" description={error?.message || 'That season could not be loaded from Sonarr.'} showSettings={false} />
       </div>
     );
   }
@@ -174,6 +137,9 @@ export default function TvSeasonDetails() {
       >
         <Button variant="outline" size="sm" onClick={() => navigate(`/tv-shows/${seriesId}`)}>
           <ArrowLeft className="mr-2 h-4 w-4" />Back to Series
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />Refresh
         </Button>
       </PageHeader>
 

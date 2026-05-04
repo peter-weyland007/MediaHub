@@ -20,7 +20,8 @@ test('Tautulli is wired into Dashboard, Settings, and service API clients', () =
   const serviceApiSource = read('src/lib/serviceApi.js');
 
   assert.match(dashboardSource, /name:\s*'Tautulli'/);
-  assert.match(dashboardSource, /tautulliApi\./);
+  assert.match(dashboardSource, /fetchDashboardData/);
+  assert.match(read('src/lib/mediaQueries.js'), /tautulliApi\./);
   assert.match(settingsSource, /name:\s*'Tautulli'/);
   assert.match(settingsSource, /tautulliApi\.getActivity/);
   assert.match(serviceApiSource, /export const tautulliApi =/);

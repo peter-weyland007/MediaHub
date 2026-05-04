@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Library, RefreshCw, Loader2, Play, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,7 +7,15 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useServiceConfig } from '@/lib/useServiceConfig';
-import { plexApi, radarrApi, sonarrApi } from '@/lib/serviceApi';
+import {
+  fetchMovieDetailsData,
+  fetchPlexLibrariesData,
+  fetchPlexLibraryContentData,
+  fetchPlexLibraryLinksData,
+  fetchPlexSessionsData,
+  fetchTvShowDetailsData,
+  getServiceCacheKey,
+} from '@/lib/mediaQueries';
 import { toast } from 'sonner';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
@@ -17,81 +26,68 @@ import { resolveLibraryItemDetailsPath, resolveLibrarySeriesDetailsPath } from '
 
 export default function PlexLibrary() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { config, posterDisplayPreferences, updatePosterDisplayPreferences, isServiceReady } = useServiceConfig();
-  const [libraries, setLibraries] = useState([]);
   const [selectedLib, setSelectedLib] = useState(null);
-  const [content, setContent] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [radarrMovies, setRadarrMovies] = useState([]);
-  const [sonarrSeries, setSonarrSeries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingContent, setLoadingContent] = useState(false);
 
   const ready = isServiceReady('plex');
   const radarrReady = isServiceReady('radarr');
   const sonarrReady = isServiceReady('sonarr');
+  const tautulliReady = isServiceReady('tautulli');
+  const plexKey = getServiceCacheKey(config.plex);
+  const radarrKey = getServiceCacheKey(config.radarr);
+  const sonarrKey = getServiceCacheKey(config.sonarr);
+  const tautulliKey = getServiceCacheKey(config.tautulli);
 
-  const fetchLibraries = async () => {
-    if (!ready) return;
-    setLoading(true);
-    const data = await plexApi.getLibraries(config.plex);
-    const libs = data?.MediaContainer?.Directory || [];
-    setLibraries(libs);
-    if (libs.length) {
-      setSelectedLib(libs[0].key);
-      fetchContent(libs[0].key);
+  const { data: libraries = [], isPending: loadingLibraries, isFetching: fetchingLibraries, refetch: refetchLibraries } = useQuery({
+    queryKey: ['plex-libraries', ...plexKey],
+    queryFn: () => fetchPlexLibrariesData(config.plex),
+    enabled: ready,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
+
+  useEffect(() => {
+    if (!libraries.length) {
+      setSelectedLib(null);
+      return;
     }
 
-    const sessData = await plexApi.getSessions(config.plex).catch(() => ({ MediaContainer: { Metadata: [] } }));
-    setSessions(sessData?.MediaContainer?.Metadata || []);
-    setLoading(false);
-  };
-
-  const fetchContent = async (sectionId) => {
-    setLoadingContent(true);
-    const data = await plexApi.getLibraryContent(config.plex, sectionId);
-    setContent(data?.MediaContainer?.Metadata || []);
-    setLoadingContent(false);
-  };
-
-  useEffect(() => {
-    if (ready) fetchLibraries();
-    else setLoading(false);
-  }, [ready]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadLibraryLinks = async () => {
-      try {
-        const [movies, series] = await Promise.all([
-          radarrReady ? radarrApi.getMovies(config.radarr) : Promise.resolve([]),
-          sonarrReady ? sonarrApi.getSeries(config.sonarr) : Promise.resolve([]),
-        ]);
-
-        if (!cancelled) {
-          setRadarrMovies(movies);
-          setSonarrSeries(series);
-        }
-      } catch {
-        if (!cancelled) {
-          setRadarrMovies([]);
-          setSonarrSeries([]);
-        }
+    setSelectedLib((current) => {
+      if (current && libraries.some((library) => library.key === current)) {
+        return current;
       }
-    };
+      return libraries[0].key;
+    });
+  }, [libraries]);
 
-    loadLibraryLinks();
+  const { data: content = [], isPending: loadingContent, isFetching: fetchingContent, refetch: refetchContent } = useQuery({
+    queryKey: ['plex-library-content', ...plexKey, String(selectedLib || '')],
+    queryFn: () => fetchPlexLibraryContentData(config.plex, selectedLib),
+    enabled: ready && Boolean(selectedLib),
+    staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [config.radarr, config.sonarr, radarrReady, sonarrReady]);
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['plex-sessions', ...plexKey],
+    queryFn: () => fetchPlexSessionsData(config.plex),
+    enabled: ready,
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
+    placeholderData: keepPreviousData,
+  });
 
-  const handleLibChange = (key) => {
-    setSelectedLib(key);
-    fetchContent(key);
-  };
+  const { data: linkData = { radarrMovies: [], sonarrSeries: [] } } = useQuery({
+    queryKey: ['plex-library-links', ...radarrKey, ...sonarrKey, radarrReady ? 'radarr-ready' : 'radarr-off', sonarrReady ? 'sonarr-ready' : 'sonarr-off'],
+    queryFn: () => fetchPlexLibraryLinksData(config.radarr, config.sonarr, radarrReady, sonarrReady),
+    enabled: radarrReady || sonarrReady,
+    staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
+  });
+
+  const radarrMovies = linkData.radarrMovies || [];
+  const sonarrSeries = linkData.sonarrSeries || [];
 
   if (!ready) {
     return (
@@ -107,17 +103,37 @@ export default function PlexLibrary() {
     return null;
   };
 
-  const handleItemClick = (item) => {
+  const handleRefresh = async () => {
+    await Promise.all([refetchLibraries(), refetchContent()]);
+  };
+
+  const handleItemClick = async (item) => {
     const detailsPath = item.type === 'show'
       ? resolveLibrarySeriesDetailsPath(item, sonarrSeries)
       : resolveLibraryItemDetailsPath(item, radarrMovies);
 
-    if (detailsPath) {
-      navigate(detailsPath);
+    if (!detailsPath) {
+      toast('No linked details available for this item yet.');
       return;
     }
 
-    toast('No linked details available for this item yet.');
+    const itemId = detailsPath.split('/').pop();
+    if (item.type === 'show' && itemId) {
+      queryClient.prefetchQuery({
+        queryKey: ['tv-show-details', ...sonarrKey, String(itemId), ...tautulliKey, tautulliReady ? 'history' : 'no-history'],
+        queryFn: () => fetchTvShowDetailsData(config.sonarr, config.tautulli, itemId, tautulliReady),
+        staleTime: 2 * 60 * 1000,
+      });
+    }
+    if (item.type !== 'show' && itemId) {
+      queryClient.prefetchQuery({
+        queryKey: ['movie-details', ...radarrKey, String(itemId)],
+        queryFn: () => fetchMovieDetailsData(config.radarr, itemId),
+        staleTime: 2 * 60 * 1000,
+      });
+    }
+
+    navigate(detailsPath);
   };
 
   return (
@@ -127,12 +143,11 @@ export default function PlexLibrary() {
           posterDisplayPreferences={posterDisplayPreferences}
           onChange={updatePosterDisplayPreferences}
         />
-        <Button variant="outline" size="sm" onClick={fetchLibraries} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={fetchingLibraries || fetchingContent}>
+          <RefreshCw className={`w-4 h-4 ${(fetchingLibraries || fetchingContent) ? 'animate-spin' : ''}`} />
         </Button>
       </PageHeader>
 
-      {/* Now Playing */}
       {sessions.length > 0 && (
         <Card className="mb-6">
           <CardHeader className="pb-2">
@@ -144,17 +159,17 @@ export default function PlexLibrary() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {sessions.map((s, i) => (
-                <div key={i} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
+              {sessions.map((session, index) => (
+                <div key={index} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
                   <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center">
                     <Users className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{s.title}</p>
-                    <p className="text-xs text-muted-foreground">{s.User?.title || 'Unknown user'}</p>
+                    <p className="text-sm font-medium truncate">{session.title}</p>
+                    <p className="text-xs text-muted-foreground">{session.User?.title || 'Unknown user'}</p>
                   </div>
                   <Badge variant="outline" className="text-xs">
-                    {s.Player?.state || 'playing'}
+                    {session.Player?.state || 'playing'}
                   </Badge>
                 </div>
               ))}
@@ -163,33 +178,31 @@ export default function PlexLibrary() {
         </Card>
       )}
 
-      {loading ? (
+      {loadingLibraries && libraries.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
         <>
-          {/* Library tabs */}
-          <Tabs value={selectedLib} onValueChange={handleLibChange}>
+          <Tabs value={selectedLib || ''} onValueChange={setSelectedLib}>
             <TabsList className="mb-6">
-              {libraries.map(lib => (
-                <TabsTrigger key={lib.key} value={lib.key}>
-                  {lib.title}
+              {libraries.map((library) => (
+                <TabsTrigger key={library.key} value={library.key}>
+                  {library.title}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
 
-          {/* Content grid */}
-          {loadingContent ? (
+          {loadingContent && content.length === 0 ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <div className={getMediaGridClassName(posterDisplayPreferences)} style={getMediaGridStyle(posterDisplayPreferences)}>
-              {content.slice(0, 60).map((item, i) => (
+              {content.slice(0, 60).map((item, index) => (
                 <MediaCard
-                  key={i}
+                  key={index}
                   title={item.title}
                   subtitle={item.year ? String(item.year) : item.parentTitle || ''}
                   image={getThumb(item)}

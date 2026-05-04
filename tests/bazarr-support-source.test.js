@@ -20,7 +20,8 @@ test('Bazarr is wired into Dashboard, Settings, and service API clients', () => 
   const serviceApiSource = read('src/lib/serviceApi.js');
 
   assert.match(dashboardSource, /name:\s*'Bazarr'/);
-  assert.match(dashboardSource, /bazarrApi\./);
+  assert.match(dashboardSource, /fetchDashboardData/);
+  assert.match(read('src/lib/mediaQueries.js'), /bazarrApi\./);
   assert.match(settingsSource, /name:\s*'Bazarr'/);
   assert.match(settingsSource, /bazarrApi\.getSystemStatus/);
   assert.match(serviceApiSource, /export const bazarrApi =/);

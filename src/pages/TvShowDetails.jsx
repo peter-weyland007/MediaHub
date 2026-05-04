@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ExternalLink, Loader2, Tv } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, ExternalLink, Loader2, RefreshCw, Tv } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useServiceConfig } from '@/lib/useServiceConfig';
-import { sonarrApi, tautulliApi } from '@/lib/serviceApi';
+import { fetchTvShowDetailsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import EmptyState from '@/components/shared/EmptyState';
 import PageHeader from '@/components/shared/PageHeader';
 import {
@@ -29,67 +30,29 @@ export default function TvShowDetails() {
     tvCleanupPreferences,
     updateTvCleanupPreferences,
   } = useServiceConfig();
-  const [series, setSeries] = useState(null);
-  const [episodes, setEpisodes] = useState([]);
-  const [episodeFiles, setEpisodeFiles] = useState([]);
-  const [historyRows, setHistoryRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [refreshToken, setRefreshToken] = useState(0);
   const [actioning, setActioning] = useState(false);
 
   const ready = isServiceReady('sonarr');
   const tautulliReady = isServiceReady('tautulli');
+  const sonarrKey = getServiceCacheKey(config.sonarr);
+  const tautulliKey = getServiceCacheKey(config.tautulli);
+  const {
+    data,
+    isPending,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['tv-show-details', ...sonarrKey, String(id || ''), ...tautulliKey, tautulliReady ? 'history' : 'no-history'],
+    queryFn: () => fetchTvShowDetailsData(config.sonarr, config.tautulli, id, tautulliReady),
+    enabled: ready && Boolean(id),
+    staleTime: 2 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadSeries = async () => {
-      if (!ready || !id) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError('');
-
-      try {
-        const requests = [
-          sonarrApi.getSeriesById(config.sonarr, id),
-          sonarrApi.getEpisodes(config.sonarr, id),
-          sonarrApi.getEpisodeFiles(config.sonarr, id),
-        ];
-
-        if (tautulliReady) {
-          requests.push(tautulliApi.getHistory(config.tautulli, { media_type: 'episode', length: '500' }));
-        }
-
-        const [seriesData, allEpisodes, files, history = []] = await Promise.all(requests);
-
-        if (!cancelled) {
-          setSeries(seriesData);
-          setEpisodes(Array.isArray(allEpisodes) ? allEpisodes : []);
-          setEpisodeFiles(Array.isArray(files) ? files : []);
-          setHistoryRows(Array.isArray(history) ? history : []);
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError.message || 'Failed to load TV show details');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadSeries();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [config.sonarr, config.tautulli, id, ready, tautulliReady, refreshToken]);
-
+  const series = data?.series || null;
+  const episodes = data?.episodes || [];
+  const episodeFiles = data?.episodeFiles || [];
+  const historyRows = data?.historyRows || [];
   const posterImage = useMemo(() => getPrimarySeriesImage(series || {}, config.sonarr || {}), [series, config.sonarr]);
   const links = useMemo(() => buildSeriesExternalLinks(series || {}, config.sonarr || {}), [series, config.sonarr]);
   const totalEpisodeFiles = episodeFiles.length;
@@ -140,7 +103,7 @@ export default function TvShowDetails() {
       }
       const appliedLabel = TV_CLEANUP_MODE_OPTIONS.find((option) => option.value === cleanupSummary.policyMode)?.label || cleanupSummary.policyMode;
       toast.success(`Applied cleanup policy: ${appliedLabel} (${eligiblePlans.length} episodes)`);
-      setRefreshToken((value) => value + 1);
+      await refetch();
     } catch (actionError) {
       toast.error(actionError.message || 'Failed to apply cleanup policy');
     } finally {
@@ -157,7 +120,7 @@ export default function TvShowDetails() {
     );
   }
 
-  if (loading) {
+  if (isPending && !data) {
     return (
       <div>
         <PageHeader title="TV details" subtitle="Loading series metadata" icon={Tv} accentColor="bg-sky-500/10">
@@ -180,7 +143,7 @@ export default function TvShowDetails() {
             <ArrowLeft className="mr-2 h-4 w-4" />Back to TV Shows
           </Button>
         </PageHeader>
-        <EmptyState icon={Tv} title="Series not available" description={error || 'That series could not be found in Sonarr.'} showSettings={false} />
+        <EmptyState icon={Tv} title="Series not available" description={error?.message || 'That series could not be found in Sonarr.'} showSettings={false} />
       </div>
     );
   }
@@ -190,6 +153,9 @@ export default function TvShowDetails() {
       <PageHeader title={series.title} subtitle={`${series.year || 'Unknown year'} • ${series.network || 'Unknown network'}`} icon={Tv} accentColor="bg-sky-500/10">
         <Button variant="outline" size="sm" onClick={() => navigate('/tv-shows')}>
           <ArrowLeft className="mr-2 h-4 w-4" />Back to TV Shows
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />Refresh
         </Button>
         {links.sonarr && (
           <a href={links.sonarr} target="_blank" rel="noreferrer">

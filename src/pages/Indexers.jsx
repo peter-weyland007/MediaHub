@@ -1,33 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Search, RefreshCw, Loader2, CheckCircle, XCircle, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useServiceConfig } from '@/lib/useServiceConfig';
-import { prowlarrApi } from '@/lib/serviceApi';
+import { fetchIndexersData, getServiceCacheKey } from '@/lib/mediaQueries';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import { cn } from '@/lib/utils';
 
 export default function Indexers() {
   const { config, isServiceReady } = useServiceConfig();
-  const [indexers, setIndexers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
   const ready = isServiceReady('prowlarr');
+  const serviceKey = getServiceCacheKey(config.prowlarr);
 
-  const fetchIndexers = async () => {
-    if (!ready) return;
-    setLoading(true);
-    const data = await prowlarrApi.getIndexers(config.prowlarr);
-    setIndexers(data);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    if (ready) fetchIndexers();
-    else setLoading(false);
-  }, [ready]);
+  const {
+    data: indexers = [],
+    isPending,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['indexers', ...serviceKey],
+    queryFn: () => fetchIndexersData(config.prowlarr),
+    enabled: ready,
+    staleTime: 60 * 1000,
+  });
 
   if (!ready) {
     return (
@@ -41,21 +39,21 @@ export default function Indexers() {
   return (
     <div>
       <PageHeader title="Indexers" subtitle={`${indexers.length} indexers configured`} icon={Search} accentColor="bg-rose-500/10">
-        <Button variant="outline" size="sm" onClick={fetchIndexers} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         </Button>
       </PageHeader>
 
-      {loading ? (
+      {isPending && indexers.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {indexers.map(indexer => (
+          {indexers.map((indexer) => (
             <Card key={indexer.id} className={cn(
-              "p-4 transition-all",
-              indexer.enable ? "border-border" : "border-border/50 opacity-60"
+              'p-4 transition-all',
+              indexer.enable ? 'border-border' : 'border-border/50 opacity-60',
             )}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -74,8 +72,8 @@ export default function Indexers() {
                 )}
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {indexer.capabilities?.categories?.slice(0, 4).map((cat, i) => (
-                  <Badge key={i} variant="secondary" className="text-[10px]">
+                {indexer.capabilities?.categories?.slice(0, 4).map((cat, index) => (
+                  <Badge key={index} variant="secondary" className="text-[10px]">
                     {cat.name}
                   </Badge>
                 ))}

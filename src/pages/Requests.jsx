@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Bell, CheckCircle, XCircle, RefreshCw, Loader2, Clock, Film, Tv } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useServiceConfig } from '@/lib/useServiceConfig';
+import { fetchRequestsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import { overseerrApi } from '@/lib/serviceApi';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
@@ -18,34 +20,31 @@ const statusColors = {
 
 export default function Requests() {
   const { config, isServiceReady } = useServiceConfig();
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-
   const ready = isServiceReady('overseerr');
+  const serviceKey = getServiceCacheKey(config.overseerr);
 
-  const fetchRequests = async () => {
-    if (!ready) return;
-    setLoading(true);
-    const data = await overseerrApi.getRequests(config.overseerr);
-    setRequests(data.results || []);
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    if (ready) fetchRequests();
-    else setLoading(false);
-  }, [ready]);
+  const {
+    data: requests = [],
+    isPending,
+    isFetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['requests', ...serviceKey],
+    queryFn: () => fetchRequestsData(config.overseerr),
+    enabled: ready,
+    staleTime: 30 * 1000,
+  });
 
   const handleApprove = async (id) => {
     await overseerrApi.approveRequest(config.overseerr, id);
     toast.success('Request approved');
-    fetchRequests();
+    await refetch();
   };
 
   const handleDecline = async (id) => {
     await overseerrApi.declineRequest(config.overseerr, id);
     toast.success('Request declined');
-    fetchRequests();
+    await refetch();
   };
 
   if (!ready) {
@@ -60,12 +59,12 @@ export default function Requests() {
   return (
     <div>
       <PageHeader title="Requests" subtitle={`${requests.length} requests`} icon={Bell} accentColor="bg-violet-500/10">
-        <Button variant="outline" size="sm" onClick={fetchRequests} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         </Button>
       </PageHeader>
 
-      {loading ? (
+      {isPending && requests.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
@@ -73,7 +72,7 @@ export default function Requests() {
         <EmptyState icon={Bell} title="No requests" description="No media requests found." showSettings={false} />
       ) : (
         <div className="space-y-3">
-          {requests.map(req => {
+          {requests.map((req) => {
             const media = req.media || {};
             const statusConf = statusColors[req.status] || statusColors[1];
             const StatusIcon = statusConf.icon;
@@ -83,12 +82,10 @@ export default function Requests() {
             return (
               <Card key={req.id} className="p-4">
                 <div className="flex items-center gap-4">
-                  {/* Poster */}
                   <div className="w-12 h-16 rounded-lg bg-muted shrink-0 overflow-hidden">
                     {posterPath && <img src={posterPath} className="w-full h-full object-cover" alt="" />}
                   </div>
 
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       {isMovie ? <Film className="w-3.5 h-3.5 text-amber-400" /> : <Tv className="w-3.5 h-3.5 text-sky-400" />}
@@ -97,7 +94,7 @@ export default function Requests() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={cn("text-[10px]", statusConf.color)}>
+                      <Badge variant="outline" className={cn('text-[10px]', statusConf.color)}>
                         <StatusIcon className="w-3 h-3 mr-1" />
                         {statusConf.label}
                       </Badge>
@@ -107,7 +104,6 @@ export default function Requests() {
                     </div>
                   </div>
 
-                  {/* Actions */}
                   {req.status === 1 && (
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => handleApprove(req.id)}>

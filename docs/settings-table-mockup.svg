@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980">
+  <rect width="1600" height="980" fill="#0b0f14"/>
+  <rect x="36" y="28" width="1528" height="924" rx="18" fill="#0f1720" stroke="#1f2937"/>
+
+  <text x="72" y="92" fill="#f8fafc" font-size="34" font-family="Arial, Helvetica, sans-serif" font-weight="700">Settings</text>
+  <text x="72" y="126" fill="#94a3b8" font-size="18" font-family="Arial, Helvetica, sans-serif">Configure your service connections</text>
+
+  <rect x="72" y="156" width="1456" height="74" rx="14" fill="#111827" stroke="#263244"/>
+  <text x="96" y="201" fill="#e2e8f0" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">Service</text>
+  <text x="290" y="201" fill="#e2e8f0" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">Purpose</text>
+  <text x="590" y="201" fill="#e2e8f0" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">Enabled</text>
+  <text x="720" y="201" fill="#e2e8f0" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">Address</text>
+  <text x="1045" y="201" fill="#e2e8f0" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">Key</text>
+  <text x="1165" y="201" fill="#e2e8f0" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">Status</text>
+  <text x="1325" y="201" fill="#e2e8f0" font-size="17" font-family="Arial, Helvetica, sans-serif" font-weight="700">Actions</text>
+
+  <!-- Row helper -->
+  <g font-family="Arial, Helvetica, sans-serif" font-size="16">
+    <rect x="72" y="242" width="1456" height="64" rx="10" fill="#0b1220" stroke="#1e293b"/>
+    <circle cx="102" cy="274" r="13" fill="#d97706"/><text x="128" y="280" fill="#f8fafc" font-weight="700">Plex</text>
+    <text x="290" y="280" fill="#cbd5e1">Media server</text>
+    <rect x="586" y="256" width="58" height="32" rx="16" fill="#16a34a"/><circle cx="626" cy="272" r="11" fill="#f8fafc"/>
+    <text x="720" y="280" fill="#cbd5e1">http://plex.local:32400</text>
+    <rect x="1038" y="254" width="86" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1061" y="277" fill="#86efac" font-size="14">Saved</text>
+    <rect x="1155" y="254" width="110" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1180" y="277" fill="#86efac" font-size="14">Connected</text>
+    <rect x="1310" y="252" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1337" y="277" fill="#e2e8f0" font-size="14">Test</text>
+    <rect x="1400" y="252" width="78" height="40" rx="10" fill="#1d4ed8" stroke="#2563eb"/><text x="1428" y="277" fill="#eff6ff" font-size="14">Edit</text>
+
+    <rect x="72" y="318" width="1456" height="64" rx="10" fill="#111827" stroke="#3b82f6"/>
+    <circle cx="102" cy="350" r="13" fill="#f59e0b"/><text x="128" y="356" fill="#f8fafc" font-weight="700">Radarr</text>
+    <text x="290" y="356" fill="#cbd5e1">Movie management</text>
+    <rect x="586" y="332" width="58" height="32" rx="16" fill="#16a34a"/><circle cx="626" cy="348" r="11" fill="#f8fafc"/>
+    <text x="720" y="356" fill="#cbd5e1">http://radarr.local:7878</text>
+    <rect x="1038" y="330" width="86" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1061" y="353" fill="#86efac" font-size="14">Saved</text>
+    <rect x="1155" y="330" width="96" height="36" rx="18" fill="#3a2508" stroke="#a16207"/><text x="1178" y="353" fill="#fcd34d" font-size="14">Untested</text>
+    <rect x="1310" y="328" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1337" y="353" fill="#e2e8f0" font-size="14">Test</text>
+    <rect x="1400" y="328" width="78" height="40" rx="10" fill="#1d4ed8" stroke="#2563eb"/><text x="1428" y="353" fill="#eff6ff" font-size="14">Edit</text>
+
+    <rect x="96" y="392" width="1408" height="196" rx="14" fill="#0b1220" stroke="#334155"/>
+    <text x="124" y="430" fill="#f8fafc" font-size="18" font-weight="700">Radarr connection details</text>
+    <text x="124" y="462" fill="#94a3b8" font-size="14">Edit full credentials here without turning the whole page into a giant form.</text>
+
+    <text x="124" y="510" fill="#cbd5e1" font-size="14">Base URL</text>
+    <rect x="124" y="524" width="560" height="48" rx="10" fill="#111827" stroke="#334155"/>
+    <text x="142" y="554" fill="#e2e8f0" font-size="15">http://radarr.local:7878</text>
+
+    <text x="720" y="510" fill="#cbd5e1" font-size="14">API Key</text>
+    <rect x="720" y="524" width="560" height="48" rx="10" fill="#111827" stroke="#334155"/>
+    <text x="738" y="554" fill="#94a3b8" font-size="15">••••••••••••••••••••••••••••••••</text>
+    <rect x="1232" y="532" width="36" height="32" rx="8" fill="#0f172a" stroke="#334155"/>
+    <text x="1243" y="553" fill="#cbd5e1" font-size="14">👁</text>
+
+    <rect x="124" y="606" width="92" height="40" rx="10" fill="#1d4ed8" stroke="#2563eb"/>
+    <text x="155" y="632" fill="#eff6ff" font-size="14">Save</text>
+    <rect x="230" y="606" width="118" height="40" rx="10" fill="#111827" stroke="#334155"/>
+    <text x="267" y="632" fill="#e2e8f0" font-size="14">Test Now</text>
+    <rect x="364" y="606" width="126" height="40" rx="10" fill="#132a1b" stroke="#1f6b3d"/>
+    <text x="390" y="632" fill="#86efac" font-size="14">Last test OK</text>
+
+    <rect x="72" y="604" width="1456" height="64" rx="10" fill="#0b1220" stroke="#1e293b"/>
+    <circle cx="102" cy="636" r="13" fill="#0ea5e9"/><text x="128" y="642" fill="#f8fafc" font-weight="700">Sonarr</text>
+    <text x="290" y="642" fill="#cbd5e1">TV show management</text>
+    <rect x="586" y="618" width="58" height="32" rx="16" fill="#16a34a"/><circle cx="626" cy="634" r="11" fill="#f8fafc"/>
+    <text x="720" y="642" fill="#cbd5e1">http://sonarr.local:8989</text>
+    <rect x="1038" y="616" width="86" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1061" y="639" fill="#86efac" font-size="14">Saved</text>
+    <rect x="1155" y="616" width="110" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1180" y="639" fill="#86efac" font-size="14">Connected</text>
+    <rect x="1310" y="614" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1337" y="639" fill="#e2e8f0" font-size="14">Test</text>
+    <rect x="1400" y="614" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1428" y="639" fill="#e2e8f0" font-size="14">Edit</text>
+
+    <rect x="72" y="680" width="1456" height="64" rx="10" fill="#0b1220" stroke="#1e293b"/>
+    <circle cx="102" cy="712" r="13" fill="#06b6d4"/><text x="128" y="718" fill="#f8fafc" font-weight="700">Bazarr</text>
+    <text x="290" y="718" fill="#cbd5e1">Subtitle management</text>
+    <rect x="586" y="694" width="58" height="32" rx="16" fill="#16a34a"/><circle cx="626" cy="710" r="11" fill="#f8fafc"/>
+    <text x="720" y="718" fill="#cbd5e1">http://bazarr.local:6767</text>
+    <rect x="1038" y="692" width="86" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1061" y="715" fill="#86efac" font-size="14">Saved</text>
+    <rect x="1155" y="692" width="110" height="36" rx="18" fill="#451a03" stroke="#c2410c"/><text x="1189" y="715" fill="#fdba74" font-size="14">Failed</text>
+    <rect x="1310" y="690" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1337" y="715" fill="#e2e8f0" font-size="14">Test</text>
+    <rect x="1400" y="690" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1428" y="715" fill="#e2e8f0" font-size="14">Edit</text>
+
+    <rect x="72" y="756" width="1456" height="64" rx="10" fill="#0b1220" stroke="#1e293b"/>
+    <circle cx="102" cy="788" r="13" fill="#a855f7"/><text x="128" y="794" fill="#f8fafc" font-weight="700">Tautulli</text>
+    <text x="290" y="794" fill="#cbd5e1">Playback analytics</text>
+    <rect x="586" y="770" width="58" height="32" rx="16" fill="#16a34a"/><circle cx="626" cy="786" r="11" fill="#f8fafc"/>
+    <text x="720" y="794" fill="#cbd5e1">http://tautulli.local:8181</text>
+    <rect x="1038" y="768" width="86" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1061" y="791" fill="#86efac" font-size="14">Saved</text>
+    <rect x="1155" y="768" width="110" height="36" rx="18" fill="#132a1b" stroke="#1f6b3d"/><text x="1180" y="791" fill="#86efac" font-size="14">Connected</text>
+    <rect x="1310" y="766" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1337" y="791" fill="#e2e8f0" font-size="14">Test</text>
+    <rect x="1400" y="766" width="78" height="40" rx="10" fill="#111827" stroke="#334155"/><text x="1428" y="791" fill="#e2e8f0" font-size="14">Edit</text>
+  </g>
+</svg>

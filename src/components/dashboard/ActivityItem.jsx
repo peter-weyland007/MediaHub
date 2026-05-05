@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Download, Check, Clock, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +12,7 @@ const statusConfig = {
   error: { icon: AlertCircle, color: 'text-destructive', label: 'Error' },
 };
 
-export default function ActivityItem({ title, service, downloadType, status = 'queued', progress, size }) {
+export default function ActivityItem({ title, service, detailPath, downloadType, status = 'queued', progress, size }) {
   const config = statusConfig[status] || statusConfig.queued;
   const StatusIcon = config.icon;
 
@@ -19,7 +20,13 @@ export default function ActivityItem({ title, service, downloadType, status = 'q
     <div className="flex items-center gap-3 py-3 border-b border-border/50 last:border-0">
       <StatusIcon className={cn("w-4 h-4 shrink-0", config.color)} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{title}</p>
+        {detailPath ? (
+          <Link to={detailPath} className="block truncate text-sm font-medium text-primary hover:underline">
+            {title}
+          </Link>
+        ) : (
+          <p className="text-sm font-medium truncate">{title}</p>
+        )}
         <div className="flex items-center gap-2 mt-0.5">
           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
             {service}

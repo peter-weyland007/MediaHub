@@ -1,5 +1,5 @@
-import React from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Search, RefreshCw, Loader2, CheckCircle, XCircle, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -15,9 +15,10 @@ import { toast } from 'sonner';
 
 export default function Indexers() {
   const { config, isServiceReady } = useServiceConfig();
-  const queryClient = useQueryClient();
   const ready = isServiceReady('prowlarr');
   const serviceKey = getServiceCacheKey(config.prowlarr);
+  const [applyingProtocolPreference, setApplyingProtocolPreference] = useState('');
+  const [lastApplyResult, setLastApplyResult] = useState(null);
 
   const {
     data: indexers = [],
@@ -32,6 +33,9 @@ export default function Indexers() {
   });
 
   const protocolPreference = getProtocolPreferenceState(indexers);
+  const protocolPreferenceLabel = applyingProtocolPreference
+    ? `Applying protocol preference: ${applyingProtocolPreference === 'usenet' ? 'Usenet' : 'Torrent'}...`
+    : protocolPreference.label;
 
   const applyProtocolPreference = async (preferredProtocol) => {
     const updates = buildProtocolPreferencePriorityUpdates(indexers, preferredProtocol);
@@ -42,11 +46,25 @@ export default function Indexers() {
     }
 
     try {
+      setApplyingProtocolPreference(preferredProtocol);
+      setLastApplyResult(null);
+      toast.success(`Applying ${preferredProtocol === 'usenet' ? 'Usenet' : 'Torrent'} preference in Prowlarr...`);
+
       const results = await Promise.allSettled(
         updates.map((indexer) => prowlarrApi.updateIndexer(config.prowlarr, indexer.id, indexer))
       );
       const succeeded = results.filter((result) => result.status === 'fulfilled').length;
       const failed = results.length - succeeded;
+      const appliedTopPriority = preferredProtocol === 'usenet' ? 50 : 50;
+      const secondaryTopPriority = preferredProtocol === 'usenet' ? 25 : 25;
+
+      setLastApplyResult({
+        preferredProtocol,
+        updatedCount: succeeded,
+        failedCount: failed,
+        appliedTopPriority,
+        secondaryTopPriority,
+      });
 
       if (succeeded && failed) {
         toast.success(`${succeeded} indexers updated. ${failed} could not be reprioritized because Prowlarr validation failed.`);
@@ -56,12 +74,11 @@ export default function Indexers() {
         toast.error('Prowlarr rejected every indexer update. Check blocked or failing indexers.');
       }
 
-      await Promise.all([
-        refetch(),
-        queryClient.invalidateQueries({ queryKey: ['indexers'] }),
-      ]);
+      await refetch();
     } catch (error) {
       toast.error(`Failed to update indexer priorities: ${error.message}`);
+    } finally {
+      setApplyingProtocolPreference('');
     }
   };
 
@@ -78,18 +95,30 @@ export default function Indexers() {
     <div>
       <PageHeader title="Indexers" subtitle={`${indexers.length} indexers configured`} icon={Search} accentColor="bg-rose-500/10">
         <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Protocol preference:</span> {protocolPreference.label}
+          <span className="font-medium text-foreground">Protocol preference:</span> {protocolPreferenceLabel}
         </div>
-        <Button size="sm" onClick={() => applyProtocolPreference('usenet')} disabled={isFetching || isPending || protocolPreference.preferredProtocol === 'usenet'}>
+        <Button size="sm" onClick={() => applyProtocolPreference('usenet')} disabled={isFetching || isPending || applyingProtocolPreference !== '' || protocolPreference.preferredProtocol === 'usenet'}>
           Prefer Usenet
         </Button>
-        <Button size="sm" variant="secondary" onClick={() => applyProtocolPreference('torrent')} disabled={isFetching || isPending || protocolPreference.preferredProtocol === 'torrent'}>
+        <Button size="sm" variant="secondary" onClick={() => applyProtocolPreference('torrent')} disabled={isFetching || isPending || applyingProtocolPreference !== '' || protocolPreference.preferredProtocol === 'torrent'}>
           Prefer Torrent
         </Button>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         </Button>
       </PageHeader>
+
+      {lastApplyResult ? (
+        <Card className="mb-4 p-4">
+          <p className="text-sm font-medium">Last apply result</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {lastApplyResult.preferredProtocol === 'usenet' ? 'Usenet' : 'Torrent'} was requested. Updated {lastApplyResult.updatedCount} indexers and {lastApplyResult.failedCount} failed validation in Prowlarr.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Preferred protocol top priority target: {lastApplyResult.appliedTopPriority} • other protocols: {lastApplyResult.secondaryTopPriority}
+          </p>
+        </Card>
+      ) : null}
 
       {isPending && indexers.length === 0 ? (
         <div className="flex items-center justify-center py-20">

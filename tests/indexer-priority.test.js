@@ -66,5 +66,12 @@ test('Indexers page and Prowlarr API expose protocol preference controls', () =>
   assert.match(indexersSource, /buildProtocolPreferencePriorityUpdates/);
   assert.match(indexersSource, /updateIndexer/);
   assert.match(indexersSource, /priority/);
+  assert.match(indexersSource, /Applying protocol preference/);
+  assert.match(indexersSource, /Last apply result/);
+  assert.match(indexersSource, /updatedCount/);
+  assert.match(indexersSource, /failedCount/);
+  assert.match(indexersSource, /await refetch\(\)/);
+  assert.doesNotMatch(indexersSource, /invalidateQueries/);
+  assert.doesNotMatch(indexersSource, /useQueryClient/);
   assert.match(serviceApiSource, /updateIndexer/);
 });

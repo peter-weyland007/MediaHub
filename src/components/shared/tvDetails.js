@@ -1,4 +1,4 @@
-/** @typedef {{ id?: number, title?: string, year?: number, images?: Array<{ coverType?: string, remoteUrl?: string, url?: string }>, seasons?: Array<{ seasonNumber?: number }>, imdbId?: string, tvdbId?: number|string }} Series */
+/** @typedef {{ id?: number, title?: string, year?: number, images?: Array<{ coverType?: string, remoteUrl?: string, url?: string }>, seasons?: Array<{ seasonNumber?: number }>, imdbId?: string, tvdbId?: number|string, titleSlug?: string }} Series */
 /** @typedef {{ id?: number, seasonNumber?: number, episodeNumber?: number, episodeFileId?: number, hasFile?: boolean, monitored?: boolean, title?: string }} Episode */
 /** @typedef {{ id?: number, mediaInfo?: { subtitles?: Array<string|{ language?: string, name?: string, title?: string }> | string }, language?: { name?: string } }} EpisodeFile */
 /** @typedef {{ url?: string }} TvServiceConfig */
@@ -53,8 +53,10 @@ export function getPrimarySeriesImage(series = {}, serviceConfig = {}) {
  * @param {TvServiceConfig} [serviceConfig]
  */
 export function buildSeriesExternalLinks(series = {}, serviceConfig = {}) {
+  const sourcePathSegment = String(series.titleSlug || series.tvdbId || series.id || '').trim();
+
   return {
-    sonarr: series.id && serviceConfig.url ? `${serviceConfig.url.replace(/\/$/, '')}/series/${series.id}` : '',
+    sonarr: sourcePathSegment && serviceConfig.url ? `${serviceConfig.url.replace(/\/$/, '')}/series/${sourcePathSegment}` : '',
     imdb: series.imdbId ? `https://www.imdb.com/title/${series.imdbId}/` : '',
     tvdb: series.tvdbId ? `https://thetvdb.com/dereferrer/series/${series.tvdbId}` : '',
   };

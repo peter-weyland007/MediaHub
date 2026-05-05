@@ -69,6 +69,7 @@ export async function fetchDashboardData(config) {
             queue.push({
               title: record.title || record.movie?.title || 'Unknown',
               service: 'Radarr',
+              detailPath: record.movieId ? `/movies/${record.movieId}` : '',
               downloadType: getQueueDownloadType(record),
               status: record.status === 'completed' ? 'completed' : 'downloading',
               progress: record.sizeleft && record.size ? ((1 - record.sizeleft / record.size) * 100) : 0,
@@ -102,6 +103,7 @@ export async function fetchDashboardData(config) {
             queue.push({
               title: record.title || record.series?.title || 'Unknown',
               service: 'Sonarr',
+              detailPath: record.seriesId ? `/tv-shows/${record.seriesId}` : '',
               downloadType: getQueueDownloadType(record),
               status: record.status === 'completed' ? 'completed' : 'downloading',
               progress: record.sizeleft && record.size ? ((1 - record.sizeleft / record.size) * 100) : 0,

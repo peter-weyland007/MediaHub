@@ -1,4 +1,4 @@
-/** @typedef {{ id?: number, title?: string, year?: number, images?: Array<{ coverType?: string, remoteUrl?: string, url?: string }>, movieFile?: { size?: number, quality?: { quality?: { name?: string } }, mediaInfo?: { videoCodec?: string, audioCodec?: string, runTime?: string } }, ratings?: Record<string, { value?: number|string }>, imdbId?: string, tmdbId?: number|string, studio?: string, status?: string, minimumAvailability?: string }} Movie */
+/** @typedef {{ id?: number, title?: string, year?: number, images?: Array<{ coverType?: string, remoteUrl?: string, url?: string }>, movieFile?: { size?: number, quality?: { quality?: { name?: string } }, mediaInfo?: { videoCodec?: string, audioCodec?: string, runTime?: string } }, ratings?: Record<string, { value?: number|string }>, imdbId?: string, tmdbId?: number|string, titleSlug?: string, studio?: string, status?: string, minimumAvailability?: string }} Movie */
 /** @typedef {{ url?: string }} ServiceConfig */
 /** @typedef {{ type?: string, title?: string, year?: number }} LibraryItem */
 
@@ -55,8 +55,10 @@ export function getPrimaryMovieImage(movie = {}, serviceConfig = {}) {
  * @param {ServiceConfig} [serviceConfig]
  */
 export function buildMovieExternalLinks(movie = {}, serviceConfig = {}) {
+  const sourcePathSegment = String(movie.titleSlug || movie.tmdbId || movie.id || '').trim();
+
   return {
-    radarr: movie.id && serviceConfig.url ? `${serviceConfig.url.replace(/\/$/, '')}/movie/${movie.id}` : '',
+    radarr: sourcePathSegment && serviceConfig.url ? `${serviceConfig.url.replace(/\/$/, '')}/movie/${sourcePathSegment}` : '',
     imdb: movie.imdbId ? `https://www.imdb.com/title/${movie.imdbId}/` : '',
     tmdb: movie.tmdbId ? `https://www.themoviedb.org/movie/${movie.tmdbId}` : '',
   };

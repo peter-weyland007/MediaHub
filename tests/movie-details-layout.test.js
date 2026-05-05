@@ -12,6 +12,7 @@ import {
   resolveLibraryItemDetailsPath,
   resolveLibrarySeriesDetailsPath,
 } from '../src/components/shared/movieDetails.js';
+import { buildSeriesExternalLinks } from '../src/components/shared/tvDetails.js';
 
 const projectRoot = '/Users/itadmin/Desktop/Projects/MediaHub';
 const read = (relativePath) => fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
@@ -24,11 +25,12 @@ test('movie detail helpers format runtime and file sizes for readable display', 
   assert.equal(formatMovieFileSize(0), '—');
 });
 
-test('movie detail helpers prefer remote poster and build external links', () => {
+test('movie detail helpers prefer title slugs for source-app links and keep external metadata links', () => {
   const movie = {
     id: 3,
     imdbId: 'tt0289043',
     tmdbId: 170,
+    titleSlug: '170',
     images: [
       { coverType: 'fanart', remoteUrl: 'https://image.tmdb.org/fanart.jpg' },
       { coverType: 'poster', remoteUrl: 'https://image.tmdb.org/poster.jpg' },
@@ -37,9 +39,25 @@ test('movie detail helpers prefer remote poster and build external links', () =>
 
   assert.equal(getPrimaryMovieImage(movie, { url: 'http://radarr.local' }), 'https://image.tmdb.org/poster.jpg');
   assert.deepEqual(buildMovieExternalLinks(movie, { url: 'http://radarr.local' }), {
-    radarr: 'http://radarr.local/movie/3',
+    radarr: 'http://radarr.local/movie/170',
     imdb: 'https://www.imdb.com/title/tt0289043/',
     tmdb: 'https://www.themoviedb.org/movie/170',
+  });
+});
+
+test('series detail helpers prefer title slugs for Sonarr links', () => {
+  const series = {
+    id: 1,
+    title: 'Devil in Disguise: John Wayne Gacy',
+    titleSlug: 'devil-in-disguise-john-wayne-gacy',
+    imdbId: 'tt31314754',
+    tvdbId: 446150,
+  };
+
+  assert.deepEqual(buildSeriesExternalLinks(series, { url: 'http://sonarr.local/' }), {
+    sonarr: 'http://sonarr.local/series/devil-in-disguise-john-wayne-gacy',
+    imdb: 'https://www.imdb.com/title/tt31314754/',
+    tvdb: 'https://thetvdb.com/dereferrer/series/446150',
   });
 });
 

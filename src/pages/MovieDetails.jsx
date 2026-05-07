@@ -1,18 +1,25 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ExternalLink, Film, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Film, Loader2, PlayCircle, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchMovieDetailsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import EmptyState from '@/components/shared/EmptyState';
 import PageHeader from '@/components/shared/PageHeader';
 import {
   buildMovieExternalLinks,
+  buildMoviePlaybackSummary,
+  formatMoviePlaybackClient,
+  formatMoviePlaybackDate,
+  formatMoviePlaybackDecision,
+  formatMoviePlexSessionLabel,
   formatMovieRuntime,
   getMovieFactItems,
+  getMoviePlaybackCards,
   getMovieRatings,
   getPrimaryMovieImage,
 } from '@/components/shared/movieDetails';
@@ -36,7 +43,11 @@ export default function MovieDetails() {
   const { config, isServiceReady } = useServiceConfig();
 
   const ready = isServiceReady('radarr');
+  const tautulliReady = isServiceReady('tautulli');
+  const plexReady = isServiceReady('plex');
   const serviceKey = getServiceCacheKey(config.radarr);
+  const tautulliKey = getServiceCacheKey(config.tautulli);
+  const plexKey = getServiceCacheKey(config.plex);
   const {
     data: movie,
     isPending,
@@ -44,8 +55,8 @@ export default function MovieDetails() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['movie-details', ...serviceKey, String(id || '')],
-    queryFn: () => fetchMovieDetailsData(config.radarr, id),
+    queryKey: ['movie-details', ...serviceKey, String(id || ''), ...tautulliKey, tautulliReady ? 'history' : 'no-history', ...plexKey, plexReady ? 'plex-sessions' : 'no-plex'],
+    queryFn: () => fetchMovieDetailsData(config.radarr, config.tautulli, config.plex, id, tautulliReady, plexReady),
     enabled: ready && Boolean(id),
     staleTime: 2 * 60 * 1000,
   });
@@ -54,6 +65,9 @@ export default function MovieDetails() {
   const posterImage = useMemo(() => getPrimaryMovieImage(movie || {}, config.radarr || {}), [movie, config.radarr]);
   const ratingItems = useMemo(() => getMovieRatings(movie || {}), [movie]);
   const factItems = useMemo(() => getMovieFactItems(movie || {}), [movie]);
+  const [playbackOpen, setPlaybackOpen] = useState(false);
+  const playbackCards = useMemo(() => getMoviePlaybackCards(movie || {}, movie?.historyRows || [], movie?.plexSessions || []), [movie]);
+  const playbackSummary = useMemo(() => buildMoviePlaybackSummary(movie || {}, movie?.historyRows || [], movie?.plexSessions || []), [movie]);
 
   if (!ready) {
     return (
@@ -168,26 +182,23 @@ export default function MovieDetails() {
                 {movie.overview || 'No description is available for this movie yet.'}
               </p>
               <DetailFactGrid items={factItems.slice(0, 4)} />
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/70 bg-card/95">
-            <CardHeader>
-              <CardTitle>Ratings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {ratingItems.length > 0 ? (
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {ratingItems.map(([label, value]) => (
-                    <div key={label} className="rounded-lg border border-border/70 bg-muted/20 p-3">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No ratings are available for this movie yet.</p>
-              )}
+              <div className="space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Ratings</p>
+                {ratingItems.length > 0 ? (
+                  <div className="grid gap-2 grid-cols-5">
+                    {ratingItems.map((rating) => (
+                      <div key={rating.label} className="rounded-lg border border-border/70 bg-muted/20 px-2 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`inline-flex min-w-[2.5rem] items-center justify-center rounded-md border px-1.5 py-1 text-[10px] font-semibold tracking-[0.08em] ${rating.iconClassName}`}>{rating.iconLabel}</span>
+                          <p className="text-lg font-semibold text-foreground leading-none">{rating.value}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No ratings are available for this movie yet.</p>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -199,6 +210,67 @@ export default function MovieDetails() {
               <DetailFactGrid items={factItems.slice(4)} />
             </CardContent>
           </Card>
+
+          <Collapsible open={playbackOpen} onOpenChange={setPlaybackOpen}>
+            <Card className="border-border/70 bg-card/95">
+              <CollapsibleTrigger asChild>
+                <button type="button" className="w-full text-left">
+                  <CardHeader className="cursor-pointer select-none">
+                    <CardTitle className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2"><PlayCircle className="h-4 w-4 text-fuchsia-400" />Playback & watch history</span>
+                      <Badge variant="outline">{playbackOpen ? 'Hide' : 'Show'}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-5">
+                  <DetailFactGrid items={playbackCards} />
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(16rem,0.85fr)]">
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Recent plays</p>
+                      {(playbackSummary.matchingHistory || []).length > 0 ? (
+                        <div className="mt-3 space-y-3">
+                          {playbackSummary.matchingHistory.slice(0, 5).map((row, index) => (
+                            <div key={`${row.date || row.stopped || 'play'}-${index}`} className="flex items-start justify-between gap-3 border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground">{row.friendly_name || row.user || 'Unknown user'}</p>
+                                <p className="text-xs text-muted-foreground">{formatMoviePlaybackClient(row)}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">{formatMoviePlaybackDate(Number(row.stopped || row.date || 0) * 1000)}</p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <Badge variant="secondary">{formatMoviePlaybackDecision(row)}</Badge>
+                                <p className="mt-2 text-xs text-muted-foreground">{Number(row.percent_complete || 0) ? `${Math.round(Number(row.percent_complete || 0))}% watched` : 'Playback recorded'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-muted-foreground">{tautulliReady ? 'No matching Tautulli history was found for this movie yet.' : 'Configure Tautulli in Settings to pull watch history for this movie.'}</p>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Active Plex sessions</p>
+                      {(playbackSummary.matchingSessions || []).length > 0 ? (
+                        <div className="mt-3 space-y-3">
+                          {playbackSummary.matchingSessions.map((session, index) => (
+                            <div key={`${session.title || 'session'}-${session.User?.title || 'user'}-${index}`} className="rounded-lg border border-border/70 bg-background/40 p-3">
+                              <p className="text-sm font-medium text-foreground">{session.User?.title || 'Unknown user'}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{formatMoviePlexSessionLabel(session)}</p>
+                              <p className="mt-2 text-xs text-muted-foreground">State: {session.Player?.state || 'playing'}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-muted-foreground">{plexReady ? 'No active Plex sessions currently match this movie.' : 'Configure Plex in Settings to show active sessions for this movie.'}</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </div>
       </div>
     </div>

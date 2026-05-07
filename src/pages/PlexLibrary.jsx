@@ -143,8 +143,8 @@ export default function PlexLibrary() {
     }
     if (item.type !== 'show' && itemId) {
       queryClient.prefetchQuery({
-        queryKey: ['movie-details', ...radarrKey, String(itemId)],
-        queryFn: () => fetchMovieDetailsData(config.radarr, itemId),
+        queryKey: ['movie-details', ...radarrKey, String(itemId), ...tautulliKey, tautulliReady ? 'history' : 'no-history', ...plexKey, ready ? 'plex-sessions' : 'no-plex'],
+        queryFn: () => fetchMovieDetailsData(config.radarr, config.tautulli, config.plex, itemId, tautulliReady, ready),
         staleTime: 2 * 60 * 1000,
       });
     }

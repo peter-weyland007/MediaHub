@@ -41,7 +41,11 @@ export default function Movies() {
   const [librarySearchTerm, setLibrarySearchTerm] = useState('');
 
   const ready = isServiceReady('radarr');
+  const tautulliReady = isServiceReady('tautulli');
+  const plexReady = isServiceReady('plex');
   const serviceKey = getServiceCacheKey(config.radarr);
+  const tautulliKey = getServiceCacheKey(config.tautulli);
+  const plexKey = getServiceCacheKey(config.plex);
   const viewMode = mediaBrowserPreferences.movies.viewMode;
   const sortBy = mediaBrowserPreferences.movies.sortBy;
 
@@ -174,8 +178,8 @@ export default function Movies() {
 
   const openMovieDetails = (movie) => {
     queryClient.prefetchQuery({
-      queryKey: ['movie-details', ...serviceKey, String(movie.id)],
-      queryFn: () => fetchMovieDetailsData(config.radarr, movie.id),
+      queryKey: ['movie-details', ...serviceKey, String(movie.id), ...tautulliKey, tautulliReady ? 'history' : 'no-history', ...plexKey, plexReady ? 'plex-sessions' : 'no-plex'],
+      queryFn: () => fetchMovieDetailsData(config.radarr, config.tautulli, config.plex, movie.id, tautulliReady, plexReady),
       staleTime: 2 * 60 * 1000,
     });
     navigate(`/movies/${movie.id}`);

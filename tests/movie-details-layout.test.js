@@ -9,6 +9,7 @@ import {
   getPrimaryMovieImage,
   buildMovieExternalLinks,
   getMovieFactItems,
+  getMovieRatings,
   resolveLibraryItemDetailsPath,
   resolveLibrarySeriesDetailsPath,
 } from '../src/components/shared/movieDetails.js';
@@ -61,7 +62,7 @@ test('series detail helpers prefer title slugs for Sonarr links', () => {
   });
 });
 
-test('movie detail helpers expose key facts for studio, runtime, status, and quality', () => {
+test('movie detail helpers expose key facts for studio, runtime, status, quality, and branded rating metadata', () => {
   const facts = getMovieFactItems({
     studio: 'DNA Films',
     status: 'released',
@@ -84,6 +85,23 @@ test('movie detail helpers expose key facts for studio, runtime, status, and qua
     'File runtime',
   ]);
   assert.equal(facts.find((item) => item.label === 'Quality')?.value, 'WEBDL-1080p');
+
+  const ratings = getMovieRatings({
+    ratings: {
+      imdb: { value: 6.64 },
+      tmdb: { value: 6.34 },
+      metacritic: { value: 67.2 },
+      rottenTomatoes: { value: 59.4 },
+      trakt: { value: 6.82734 },
+      letterboxd: { value: '' },
+    },
+  });
+
+  assert.deepEqual(ratings.map((item) => item.label), ['IMDb', 'TMDb', 'Metacritic', 'Rotten Tomatoes', 'Trakt']);
+  assert.deepEqual(ratings.map((item) => item.value), ['6.6', '6.3', '67', '59', '6.8']);
+  assert.equal(ratings[0].iconLabel, 'IMDb');
+  assert.equal(ratings[1].iconLabel, 'TMDb');
+  assert.equal(getMovieRatings({ ratings: { imdb: { value: '' }, tmdb: { value: null } } }).length, 0);
 });
 
 test('movie detail helpers can resolve Plex library movies and shows into shared details routes', () => {
@@ -148,10 +166,22 @@ test('movie details and TV details pages load service metadata and render their 
 
   assert.match(movieSource, /useParams/);
   assert.match(movieSource, /useQuery/);
-  assert.match(movieSource, /fetchMovieDetailsData\(config\.radarr, id\)/);
+  assert.match(movieSource, /fetchMovieDetailsData\(config\.radarr, config\.tautulli, config\.plex, id, tautulliReady, plexReady\)/);
   assert.match(movieSource, /buildMovieExternalLinks/);
   assert.match(movieSource, /About this movie/);
   assert.match(movieSource, /Ratings/);
+  assert.match(movieSource, /getMovieRatings\(movie \|\| \{\}\)/);
+  assert.match(movieSource, /ratingItems\.map\(\(rating\) =>/);
+  assert.match(movieSource, /rating\.iconLabel/);
+  assert.match(movieSource, /className="grid gap-2 grid-cols-5"/);
+  assert.match(movieSource, /className="rounded-lg border border-border\/70 bg-muted\/20 px-2 py-2"/);
+  assert.match(movieSource, /className="flex items-center justify-between gap-2"/);
+  assert.match(movieSource, /min-w-\[2\.5rem\]/);
+  assert.match(movieSource, /text-lg font-semibold text-foreground leading-none"/);
+  assert.doesNotMatch(movieSource, /text-\[10px\] uppercase tracking-\[0\.1em\] text-muted-foreground/);
+  assert.doesNotMatch(movieSource, /<p className="text-\[10px\] uppercase tracking-\[0\.1em\] text-muted-foreground">\{rating\.label\}<\/p>/);
+  assert.doesNotMatch(movieSource, /<CardTitle>Ratings<\/CardTitle>/);
+  assert.match(movieSource, /Playback & watch history/);
   assert.match(movieSource, /Technical details/);
   assert.match(movieSource, /Open in Radarr/);
   assert.match(movieSource, /IMDb/);

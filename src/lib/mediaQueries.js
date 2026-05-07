@@ -252,15 +252,26 @@ export const fetchTvReferenceData = async (sonarrConfig) => {
   };
 };
 
-export const fetchMovieDetailsData = async (radarrConfig, id) => {
-  const [movie, files] = await Promise.all([
+export const fetchMovieDetailsData = async (radarrConfig, tautulliConfig, plexConfig, id, includeHistory, includeSessions) => {
+  const historyPromise = includeHistory
+    ? tautulliApi.getHistory(tautulliConfig, { media_type: 'movie', length: '200' })
+    : Promise.resolve([]);
+  const plexSessionsPromise = includeSessions
+    ? plexApi.getSessions(plexConfig).catch(() => ({ MediaContainer: { Metadata: [] } }))
+    : Promise.resolve({ MediaContainer: { Metadata: [] } });
+
+  const [movie, files, historyRows, plexSessionsResponse] = await Promise.all([
     radarrApi.getMovie(radarrConfig, id),
     radarrApi.getMovieFiles(radarrConfig, id),
+    historyPromise,
+    plexSessionsPromise,
   ]);
 
   return {
     ...movie,
     movieFile: Array.isArray(files) && files.length > 0 ? files[0] : movie.movieFile,
+    historyRows: Array.isArray(historyRows) ? historyRows : [],
+    plexSessions: plexSessionsResponse?.MediaContainer?.Metadata || [],
   };
 };
 

@@ -18,3 +18,13 @@ test('Dashboard status loading is driven by query state instead of mount-only lo
   assert.doesNotMatch(source, /const \[stats, setStats\] = useState\(\{\}\);/);
   assert.doesNotMatch(source, /const \[queue, setQueue\] = useState\(\[\]\);/);
 });
+
+test('Dashboard shows Radarr and Sonarr watch metrics through shared service cards', () => {
+  assert.match(source, /ServiceCard/);
+  assert.match(source, /fetchDashboardData/);
+  assert.match(fs.readFileSync('/Users/itadmin/Desktop/Projects/MediaHub/src/lib/mediaQueries.js', 'utf8'), /buildMovieWatchStats/);
+  assert.match(fs.readFileSync('/Users/itadmin/Desktop/Projects/MediaHub/src/lib/mediaQueries.js', 'utf8'), /buildSeriesWatchStats/);
+  assert.match(fs.readFileSync('/Users/itadmin/Desktop/Projects/MediaHub/src/lib/mediaQueries.js', 'utf8'), /label: 'Watched'/);
+  assert.match(fs.readFileSync('/Users/itadmin/Desktop/Projects/MediaHub/src/lib/mediaQueries.js', 'utf8'), /movieWatchStats\.watchedDisplay/);
+  assert.match(fs.readFileSync('/Users/itadmin/Desktop/Projects/MediaHub/src/lib/mediaQueries.js', 'utf8'), /seriesWatchStats\.watchedDisplay/);
+});

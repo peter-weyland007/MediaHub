@@ -8,6 +8,7 @@ import {
   sonarrApi,
   tautulliApi,
 } from '@/lib/serviceApi';
+import { buildMovieWatchStats, buildSeriesWatchStats } from '@/components/shared/dashboardMetrics';
 
 export const getServiceCacheKey = (serviceConfig) => ([
   serviceConfig?.url || '',
@@ -45,12 +46,17 @@ export async function fetchDashboardData(config) {
   const stats = {};
   const queue = [];
   const checks = [];
+  const radarrMovies = [];
+  const sonarrSeries = [];
+  let tautulliMovieHistory = [];
+  let tautulliEpisodeHistory = [];
 
   if (isReady(config.radarr)) {
     checks.push(
       radarrApi.getMovies(config.radarr)
         .then((movies) => {
           statuses.radarr = 'connected';
+          radarrMovies.push(...movies);
           const downloaded = movies.filter((movie) => movie.hasFile).length;
           stats.radarr = [
             { label: 'Movies', value: movies.length },
@@ -86,6 +92,7 @@ export async function fetchDashboardData(config) {
       sonarrApi.getSeries(config.sonarr)
         .then((series) => {
           statuses.sonarr = 'connected';
+          sonarrSeries.push(...series);
           stats.sonarr = [
             { label: 'Series', value: series.length },
             { label: 'Monitored', value: series.filter((item) => item.monitored).length },
@@ -166,6 +173,26 @@ export async function fetchDashboardData(config) {
           statuses.tautulli = 'error';
         }),
     );
+
+    checks.push(
+      tautulliApi.getHistory(config.tautulli, { media_type: 'movie', length: '500' })
+        .then((rows) => {
+          tautulliMovieHistory = Array.isArray(rows) ? rows : [];
+        })
+        .catch(() => {
+          tautulliMovieHistory = [];
+        }),
+    );
+
+    checks.push(
+      tautulliApi.getHistory(config.tautulli, { media_type: 'episode', length: '1000' })
+        .then((rows) => {
+          tautulliEpisodeHistory = Array.isArray(rows) ? rows : [];
+        })
+        .catch(() => {
+          tautulliEpisodeHistory = [];
+        }),
+    );
   }
 
   if (isReady(config.overseerr)) {
@@ -218,6 +245,22 @@ export async function fetchDashboardData(config) {
   }
 
   await Promise.allSettled(checks);
+
+  if (statuses.radarr === 'connected' && statuses.tautulli === 'connected') {
+    const movieWatchStats = buildMovieWatchStats(radarrMovies, tautulliMovieHistory);
+    stats.radarr = [
+      { label: 'Movies', value: movieWatchStats.totalCount },
+      { label: 'Watched', value: movieWatchStats.watchedDisplay },
+    ];
+  }
+
+  if (statuses.sonarr === 'connected' && statuses.tautulli === 'connected') {
+    const seriesWatchStats = buildSeriesWatchStats(sonarrSeries, tautulliEpisodeHistory);
+    stats.sonarr = [
+      { label: 'Series', value: seriesWatchStats.totalCount },
+      { label: 'Watched', value: seriesWatchStats.watchedDisplay },
+    ];
+  }
 
   for (const service of ['radarr', 'sonarr', 'lidarr', 'bazarr', 'tautulli', 'overseerr', 'plex', 'prowlarr']) {
     if (!isReady(config[service]) && !statuses[service]) {

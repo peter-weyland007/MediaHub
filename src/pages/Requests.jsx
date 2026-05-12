@@ -5,10 +5,19 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchRequestsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import { overseerrApi, radarrApi, sonarrApi } from '@/lib/serviceApi';
-import { formatRequestHeadline, formatRequestMeta, getRequestDetailPath, getRequestStatusKey } from '@/lib/requestDisplay';
+import {
+  formatRequestHeadline,
+  formatRequestMeta,
+  getRequestDetailPath,
+  getRequestStatusCounts,
+  getRequestStatusFilterOptions,
+  getRequestStatusKey,
+  getVisibleRequests,
+} from '@/lib/requestDisplay';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import { toast } from 'sonner';
@@ -25,9 +34,11 @@ const statusColors = {
   available: { label: 'Available', color: 'bg-violet-500/10 text-violet-400 border-violet-500/20', icon: Library },
   unknown: { label: 'Unknown', color: 'bg-muted text-muted-foreground border-border/60', icon: Clock },
   deleted: { label: 'Deleted', color: 'bg-muted text-muted-foreground border-border/60', icon: XCircle },
+  all: { label: 'All Requests', color: 'bg-slate-500/10 text-slate-200 border-slate-500/20', icon: Bell },
 };
 
 export default function Requests() {
+  const [statusFilter, setStatusFilter] = React.useState('all');
   const { config, isServiceReady } = useServiceConfig();
   const ready = isServiceReady('overseerr');
   const radarrReady = isServiceReady('radarr');
@@ -86,6 +97,16 @@ export default function Requests() {
     await refetch();
   };
 
+  const statusCounts = React.useMemo(() => getRequestStatusCounts(requests), [requests]);
+  const statusOptions = React.useMemo(() => getRequestStatusFilterOptions(requests), [requests]);
+  const filteredRequests = React.useMemo(() => getVisibleRequests(requests, statusFilter), [requests, statusFilter]);
+
+  React.useEffect(() => {
+    if (!statusOptions.some((option) => option.key === statusFilter)) {
+      setStatusFilter('all');
+    }
+  }, [statusFilter, statusOptions]);
+
   if (!ready) {
     return (
       <div>
@@ -98,9 +119,29 @@ export default function Requests() {
   return (
     <div>
       <PageHeader title="Requests" subtitle={`${requests.length} requests`} icon={Bell} accentColor="bg-violet-500/10">
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-52">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((option) => {
+                const optionStatus = statusColors[option.key] || statusColors.pending;
+                return (
+                  <SelectItem value={option.key} key={option.key}>{optionStatus.label} ({option.count})</SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {statusFilter !== 'all' && (
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setStatusFilter('all')}>
+              Clear filter
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
       </PageHeader>
 
       {isPending && requests.length === 0 ? (
@@ -110,64 +151,112 @@ export default function Requests() {
       ) : requests.length === 0 ? (
         <EmptyState icon={Bell} title="No requests" description="No media requests found." showSettings={false} />
       ) : (
-        <div className="space-y-3">
-          {requests.map((req) => {
-            const media = req.media || {};
-            const statusKey = getRequestStatusKey(req);
-            const statusConf = statusColors[statusKey] || statusColors.pending;
-            const StatusIcon = statusConf.icon;
-            const isMovie = req.type === 'movie';
-            const posterPath = media.posterPath ? `https://image.tmdb.org/t/p/w92${media.posterPath}` : null;
-            const detailPath = getRequestDetailPath(req, requestRouteLookup.movieLookup, requestRouteLookup.tvLookup);
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {statusCounts.map((item) => {
+              const statusConf = statusColors[item.key] || statusColors.pending;
+              const StatusIcon = statusConf.icon;
+              const isActive = statusFilter === item.key;
 
-            return (
-              <Card key={req.id} className="p-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-16 rounded-lg bg-muted shrink-0 overflow-hidden">
-                    {posterPath && <img src={posterPath} className="w-full h-full object-cover" alt="" />}
+              return (
+                <Card
+                  key={item.key}
+                  className={cn(
+                    'p-4 cursor-pointer transition-colors border-border/60 hover:border-border',
+                    isActive && 'border-violet-500/40 bg-violet-500/5',
+                  )}
+                  onClick={() => setStatusFilter(item.key)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setStatusFilter(item.key);
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{statusConf.label}</p>
+                      <p className="mt-2 text-3xl font-semibold text-foreground">{item.count}</p>
+                    </div>
+                    <div className={cn('rounded-lg border px-2 py-2', statusConf.color)}>
+                      <StatusIcon className="w-4 h-4" />
+                    </div>
                   </div>
+                </Card>
+              );
+            })}
+          </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {isMovie ? <Film className="w-3.5 h-3.5 text-amber-400" /> : <Tv className="w-3.5 h-3.5 text-sky-400" />}
-                      {detailPath ? (
-                        <Link to={detailPath} className="font-semibold text-sm truncate text-foreground hover:underline" onClick={(event) => event.stopPropagation()}>
-                          {formatRequestHeadline(req)}
-                        </Link>
-                      ) : (
-                        <p className="font-semibold text-sm truncate">
-                          {formatRequestHeadline(req)}
-                        </p>
+          {filteredRequests.length === 0 ? (
+            <EmptyState
+              icon={Bell}
+              title="No requests match this filter"
+              description="Try a different request status filter to see more items."
+              showSettings={false}
+            />
+          ) : (
+            <div className="space-y-3">
+              {filteredRequests.map((req) => {
+                const media = req.media || {};
+                const statusKey = getRequestStatusKey(req);
+                const statusConf = statusColors[statusKey] || statusColors.pending;
+                const StatusIcon = statusConf.icon;
+                const isMovie = req.type === 'movie';
+                const posterPath = media.posterPath ? `https://image.tmdb.org/t/p/w92${media.posterPath}` : null;
+                const detailPath = getRequestDetailPath(req, requestRouteLookup.movieLookup, requestRouteLookup.tvLookup);
+
+                return (
+                  <Card key={req.id} className="p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-16 rounded-lg bg-muted shrink-0 overflow-hidden">
+                        {posterPath && <img src={posterPath} className="w-full h-full object-cover" alt="" />}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          {isMovie ? <Film className="w-3.5 h-3.5 text-amber-400" /> : <Tv className="w-3.5 h-3.5 text-sky-400" />}
+                          {detailPath ? (
+                            <Link to={detailPath} className="font-semibold text-sm truncate text-foreground hover:underline" onClick={(event) => event.stopPropagation()}>
+                              {formatRequestHeadline(req)}
+                            </Link>
+                          ) : (
+                            <p className="font-semibold text-sm truncate">
+                              {formatRequestHeadline(req)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={cn('text-[10px]', statusConf.color)}>
+                            <StatusIcon className="w-3 h-3 mr-1" />
+                            {statusConf.label}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatRequestMeta(req)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            by {req.requestedBy?.displayName || req.requestedBy?.email || 'Unknown'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {req.status === 1 && (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => handleApprove(req.id)}>
+                            <CheckCircle className="w-4 h-4 mr-1" />Approve
+                          </Button>
+                          <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleDecline(req.id)}>
+                            <XCircle className="w-4 h-4 mr-1" />Decline
+                          </Button>
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={cn('text-[10px]', statusConf.color)}>
-                        <StatusIcon className="w-3 h-3 mr-1" />
-                        {statusConf.label}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatRequestMeta(req)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        by {req.requestedBy?.displayName || req.requestedBy?.email || 'Unknown'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {req.status === 1 && (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => handleApprove(req.id)}>
-                        <CheckCircle className="w-4 h-4 mr-1" />Approve
-                      </Button>
-                      <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleDecline(req.id)}>
-                        <XCircle className="w-4 h-4 mr-1" />Decline
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

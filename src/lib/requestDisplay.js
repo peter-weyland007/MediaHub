@@ -28,6 +28,20 @@ const mediaStatusKeyMap = {
   6: 'deleted',
 };
 
+export const requestStatusFilterOrder = [
+  'all',
+  'pending',
+  'approved',
+  'processing',
+  'partially_available',
+  'available',
+  'completed',
+  'failed',
+  'declined',
+  'deleted',
+  'unknown',
+];
+
 const getRequestMedia = (request = {}) => request.mediaDetails || request.media || {};
 const getRequestIdentityMedia = (request = {}) => request.media || request.mediaDetails || {};
 
@@ -58,6 +72,33 @@ export const getRequestStatusKey = (request = {}) => {
   }
 
   return 'pending';
+};
+
+export const getRequestStatusCounts = (requests = []) => {
+  const counts = new Map([['all', Array.isArray(requests) ? requests.length : 0]]);
+
+  for (const request of Array.isArray(requests) ? requests : []) {
+    const statusKey = getRequestStatusKey(request);
+    counts.set(statusKey, (counts.get(statusKey) || 0) + 1);
+  }
+
+  return requestStatusFilterOrder
+    .filter((key) => counts.has(key) && counts.get(key) > 0)
+    .map((key) => ({ key, count: counts.get(key) || 0 }));
+};
+
+export const getRequestStatusFilterOptions = (requests = []) => getRequestStatusCounts(requests);
+
+export const getVisibleRequests = (requests = [], statusFilter = 'all') => {
+  if (!Array.isArray(requests)) {
+    return [];
+  }
+
+  if (!statusFilter || statusFilter === 'all' || !requestStatusFilterOrder.includes(statusFilter)) {
+    return requests;
+  }
+
+  return requests.filter((request) => getRequestStatusKey(request) === statusFilter);
 };
 
 export const formatRequestHeadline = (request = {}) => {

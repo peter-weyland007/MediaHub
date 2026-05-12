@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, CheckCircle, XCircle, RefreshCw, Loader2, Clock, Film, Tv } from 'lucide-react';
+import { Bell, CheckCircle, XCircle, RefreshCw, Loader2, Clock, Film, Tv, Download, Library } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -8,16 +8,23 @@ import { Badge } from '@/components/ui/badge';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchRequestsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import { overseerrApi, radarrApi, sonarrApi } from '@/lib/serviceApi';
-import { formatRequestHeadline, formatRequestMeta, getRequestDetailPath } from '@/lib/requestDisplay';
+import { formatRequestHeadline, formatRequestMeta, getRequestDetailPath, getRequestStatusKey } from '@/lib/requestDisplay';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const statusColors = {
-  1: { label: 'Pending', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Clock },
-  2: { label: 'Approved', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CheckCircle },
-  3: { label: 'Declined', color: 'bg-destructive/10 text-destructive border-destructive/20', icon: XCircle },
+  pending: { label: 'Pending', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', icon: Clock },
+  approved: { label: 'Approved', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CheckCircle },
+  declined: { label: 'Declined', color: 'bg-destructive/10 text-destructive border-destructive/20', icon: XCircle },
+  failed: { label: 'Failed', color: 'bg-destructive/10 text-destructive border-destructive/20', icon: XCircle },
+  completed: { label: 'Completed', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', icon: CheckCircle },
+  processing: { label: 'Processing', color: 'bg-sky-500/10 text-sky-400 border-sky-500/20', icon: Download },
+  partially_available: { label: 'Partially Available', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20', icon: Library },
+  available: { label: 'Available', color: 'bg-violet-500/10 text-violet-400 border-violet-500/20', icon: Library },
+  unknown: { label: 'Unknown', color: 'bg-muted text-muted-foreground border-border/60', icon: Clock },
+  deleted: { label: 'Deleted', color: 'bg-muted text-muted-foreground border-border/60', icon: XCircle },
 };
 
 export default function Requests() {
@@ -106,7 +113,8 @@ export default function Requests() {
         <div className="space-y-3">
           {requests.map((req) => {
             const media = req.media || {};
-            const statusConf = statusColors[req.status] || statusColors[1];
+            const statusKey = getRequestStatusKey(req);
+            const statusConf = statusColors[statusKey] || statusColors.pending;
             const StatusIcon = statusConf.icon;
             const isMovie = req.type === 'movie';
             const posterPath = media.posterPath ? `https://image.tmdb.org/t/p/w92${media.posterPath}` : null;

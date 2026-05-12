@@ -11,8 +11,54 @@ const getMediaYear = (media = {}, type = '') => {
   return match ? match[1] : null;
 };
 
+const requestStatusKeyMap = {
+  1: 'pending',
+  2: 'approved',
+  3: 'declined',
+  4: 'failed',
+  5: 'completed',
+};
+
+const mediaStatusKeyMap = {
+  1: 'unknown',
+  2: 'pending',
+  3: 'processing',
+  4: 'partially_available',
+  5: 'available',
+  6: 'deleted',
+};
+
 const getRequestMedia = (request = {}) => request.mediaDetails || request.media || {};
 const getRequestIdentityMedia = (request = {}) => request.media || request.mediaDetails || {};
+
+export const getRequestStatusKey = (request = {}) => {
+  const primaryMedia = request.mediaDetails || {};
+  const fallbackMedia = request.media || {};
+  const primaryMediaStatus = Number(primaryMedia?.status);
+  const fallbackMediaStatus = Number(fallbackMedia?.status);
+  const mediaStatus = Number.isFinite(primaryMediaStatus)
+    ? primaryMediaStatus
+    : (Number.isFinite(fallbackMediaStatus) ? fallbackMediaStatus : Number(getRequestMedia(request)?.status));
+  const requestStatus = Number(request.status);
+
+  if ([3, 4, 5].includes(requestStatus) && requestStatusKeyMap[requestStatus]) {
+    return requestStatusKeyMap[requestStatus];
+  }
+
+  if (requestStatus === 2 && [2, 3, 4, 5, 6].includes(mediaStatus) && mediaStatusKeyMap[mediaStatus]) {
+    return mediaStatusKeyMap[mediaStatus];
+  }
+
+  if (Number.isFinite(requestStatus) && requestStatusKeyMap[requestStatus]) {
+    return requestStatusKeyMap[requestStatus];
+  }
+
+  if (Number.isFinite(mediaStatus) && mediaStatusKeyMap[mediaStatus]) {
+    return mediaStatusKeyMap[mediaStatus];
+  }
+
+  return 'pending';
+};
 
 export const formatRequestHeadline = (request = {}) => {
   const media = getRequestMedia(request);

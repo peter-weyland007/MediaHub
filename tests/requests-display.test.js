@@ -131,6 +131,8 @@ test('Requests page defines summary count panels and a status filter control wir
   assert.match(source, /SelectItem value=\{option\.key\}/);
   assert.match(source, /statusCounts\.map\(\(item\) =>/);
   assert.match(source, /filteredRequests\.map\(\(req\) =>/);
+  assert.match(source, /overflow-x-auto pb-1/);
+  assert.match(source, /flex min-w-max gap-3/);
 });
 
 test('Requests page defines explicit badges for available and processing request states', () => {

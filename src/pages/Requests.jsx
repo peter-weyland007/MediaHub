@@ -152,7 +152,8 @@ export default function Requests() {
         <EmptyState icon={Bell} title="No requests" description="No media requests found." showSettings={false} />
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max gap-3">
             {statusCounts.map((item) => {
               const statusConf = statusColors[item.key] || statusColors.pending;
               const StatusIcon = statusConf.icon;
@@ -162,7 +163,7 @@ export default function Requests() {
                 <Card
                   key={item.key}
                   className={cn(
-                    'p-4 cursor-pointer transition-colors border-border/60 hover:border-border',
+                    'w-44 shrink-0 p-4 cursor-pointer transition-colors border-border/60 hover:border-border',
                     isActive && 'border-violet-500/40 bg-violet-500/5',
                   )}
                   onClick={() => setStatusFilter(item.key)}
@@ -187,6 +188,7 @@ export default function Requests() {
                 </Card>
               );
             })}
+            </div>
           </div>
 
           {filteredRequests.length === 0 ? (

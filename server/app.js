@@ -246,6 +246,11 @@ export const createApp = ({
     return res.json({ tvCleanupPreferences: saved });
   });
 
+  app.put('/api/app-config/movie-cleanup-preferences', (req, res) => {
+    const saved = store.saveMovieCleanupPreferences(req.body ?? {});
+    return res.json({ movieCleanupPreferences: saved });
+  });
+
   app.post('/api/service-proxy/:service', async (req, res) => {
     const { service } = req.params;
     if (!(service in DEFAULT_SERVICES)) {

@@ -177,6 +177,37 @@ test('PUT /api/app-config/optimization-preferences persists optimization prefere
   });
 });
 
+test('PUT /api/app-config/movie-cleanup-preferences persists watched cleanup preferences into sqlite', async () => {
+  const paths = createTempPaths();
+  writeFakeDist(paths.distPath);
+
+  const payload = {
+    watchedThresholdPercent: 90,
+    waitDays: 3,
+    movies: {
+      '13': { mode: 'delete-unmonitor' },
+      '42': { mode: 'keep-all' },
+    },
+  };
+
+  await withServer({ dbPath: paths.dbPath, distPath: paths.distPath }, async (baseUrl) => {
+    const saveResponse = await fetch(`${baseUrl}/api/app-config/movie-cleanup-preferences`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    assert.equal(saveResponse.status, 200);
+  });
+
+  await withServer({ dbPath: paths.dbPath, distPath: paths.distPath }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/app-config`);
+    const body = await response.json();
+
+    assert.deepEqual(body.movieCleanupPreferences, payload);
+  });
+});
+
 test('PUT /api/app-config/tv-cleanup-preferences persists watched cleanup preferences into sqlite', async () => {
   const paths = createTempPaths();
   writeFakeDist(paths.distPath);

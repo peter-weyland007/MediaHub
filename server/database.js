@@ -38,6 +38,12 @@ export const DEFAULT_TV_CLEANUP_PREFERENCES = {
   shows: {},
 };
 
+export const DEFAULT_MOVIE_CLEANUP_PREFERENCES = {
+  watchedThresholdPercent: 90,
+  waitDays: 3,
+  movies: {},
+};
+
 export const USER_ROLES = ['admin', 'operator', 'viewer'];
 
 const QUALITY_PREFERENCES_KEY = 'quality_preferences';
@@ -45,6 +51,7 @@ const POSTER_DISPLAY_PREFERENCES_KEY = 'poster_display_preferences';
 const MEDIA_BROWSER_PREFERENCES_KEY = 'media_browser_preferences';
 const OPTIMIZATION_PREFERENCES_KEY = 'optimization_preferences';
 const TV_CLEANUP_PREFERENCES_KEY = 'tv_cleanup_preferences';
+const MOVIE_CLEANUP_PREFERENCES_KEY = 'movie_cleanup_preferences';
 const DEFAULT_ADMIN_USERNAME = 'admin';
 const DEFAULT_ADMIN_PASSWORD = 'admin';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
@@ -111,6 +118,25 @@ const normalizeTvCleanupPreferences = (preferences = {}) => ({
         watched: Boolean(override?.watched),
         source: 'manual',
         watchedAt: override?.watchedAt ? new Date(override.watchedAt).toISOString() : null,
+      },
+    ])
+  ),
+});
+
+const normalizeMovieCleanupPreferences = (preferences = {}) => ({
+  watchedThresholdPercent: Number.isFinite(Number(preferences.watchedThresholdPercent)) && Number(preferences.watchedThresholdPercent) >= 1 && Number(preferences.watchedThresholdPercent) <= 100
+    ? Number(preferences.watchedThresholdPercent)
+    : DEFAULT_MOVIE_CLEANUP_PREFERENCES.watchedThresholdPercent,
+  waitDays: Number.isFinite(Number(preferences.waitDays)) && Number(preferences.waitDays) >= 0
+    ? Number(preferences.waitDays)
+    : DEFAULT_MOVIE_CLEANUP_PREFERENCES.waitDays,
+  movies: Object.fromEntries(
+    Object.entries(preferences.movies || {}).map(([movieId, moviePreferences]) => [
+      String(movieId),
+      {
+        mode: ['keep-all', 'delete-unmonitor'].includes(moviePreferences?.mode)
+          ? moviePreferences.mode
+          : 'keep-all',
       },
     ])
   ),
@@ -288,6 +314,9 @@ export const createConfigStore = ({ dbPath }) => {
         tvCleanupPreferences: normalizeTvCleanupPreferences(
           readJsonState(TV_CLEANUP_PREFERENCES_KEY, DEFAULT_TV_CLEANUP_PREFERENCES)
         ),
+        movieCleanupPreferences: normalizeMovieCleanupPreferences(
+          readJsonState(MOVIE_CLEANUP_PREFERENCES_KEY, DEFAULT_MOVIE_CLEANUP_PREFERENCES)
+        ),
       };
     },
 
@@ -333,6 +362,12 @@ export const createConfigStore = ({ dbPath }) => {
     saveTvCleanupPreferences(preferences = {}) {
       const normalized = normalizeTvCleanupPreferences(preferences);
       upsertStateStmt.run(TV_CLEANUP_PREFERENCES_KEY, JSON.stringify(normalized));
+      return normalized;
+    },
+
+    saveMovieCleanupPreferences(preferences = {}) {
+      const normalized = normalizeMovieCleanupPreferences(preferences);
+      upsertStateStmt.run(MOVIE_CLEANUP_PREFERENCES_KEY, JSON.stringify(normalized));
       return normalized;
     },
 

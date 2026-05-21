@@ -115,8 +115,11 @@ export const radarrApi = {
   addMovie: (config, movie) => radarrApi.post(config, '/movie', movie),
   deleteMovie: (config, id, deleteFiles = false) => radarrApi.delete(config, `/movie/${id}?deleteFiles=${deleteFiles}`),
   commandSearch: (config, movieIds) => radarrApi.post(config, '/command', { name: 'MoviesSearch', movieIds }),
+  getCommand: (config, commandId) => radarrApi.get(config, `/command/${commandId}`),
   updateMoviesQualityProfile: (config, movieIds, qualityProfileId) => radarrApi.put(config, '/movie/editor', { movieIds, qualityProfileId }),
+  updateMoviesMonitored: (config, movieIds, monitored) => radarrApi.put(config, '/movie/editor', { movieIds, monitored }),
   getMovieFiles: (config, movieId) => radarrApi.get(config, `/moviefile?movieId=${movieId}`),
+  deleteMovieFile: (config, movieFileId) => radarrApi.delete(config, `/moviefile/${movieFileId}`),
   commandRescanMovie: (config, movieId) => radarrApi.post(config, '/command', { name: 'RescanMovie', movieId }),
 };
 
@@ -137,6 +140,7 @@ export const sonarrApi = {
   addSeries: (config, series) => sonarrApi.post(config, '/series', series),
   deleteSeries: (config, id, deleteFiles = false) => sonarrApi.delete(config, `/series/${id}?deleteFiles=${deleteFiles}`),
   commandSearch: (config, seriesId) => sonarrApi.post(config, '/command', { name: 'SeriesSearch', seriesId }),
+  getCommand: (config, commandId) => sonarrApi.get(config, `/command/${commandId}`),
   updateSeriesQualityProfile: (config, seriesIds, qualityProfileId) => sonarrApi.put(config, '/series/editor', { seriesIds, qualityProfileId }),
   getEpisodes: (config, seriesId) => sonarrApi.get(config, `/episode?seriesId=${seriesId}`),
   updateEpisodesMonitored: (config, episodeIds, monitored) => sonarrApi.put(config, '/episode/monitor', { episodeIds, monitored }),

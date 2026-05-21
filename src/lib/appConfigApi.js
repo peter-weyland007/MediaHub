@@ -71,4 +71,14 @@ export const appConfigApi = {
 
     return handleJsonResponse(response);
   },
+
+  async updateMovieCleanupPreferences(movieCleanupPreferences) {
+    const response = await fetch('/api/app-config/movie-cleanup-preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(movieCleanupPreferences),
+    });
+
+    return handleJsonResponse(response);
+  },
 };

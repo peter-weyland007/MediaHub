@@ -33,6 +33,12 @@ const defaultTvCleanupPreferences = {
   manualOverrides: {},
 };
 
+const defaultMovieCleanupPreferences = {
+  watchedThresholdPercent: 90,
+  waitDays: 3,
+  movies: {},
+};
+
 const APP_CONFIG_QUERY_KEY = ['app-config'];
 
 const normalizeAppConfig = (data = {}) => ({
@@ -46,6 +52,11 @@ const normalizeAppConfig = (data = {}) => ({
     ...(data.tvCleanupPreferences || {}),
     shows: data.tvCleanupPreferences?.shows || {},
     manualOverrides: data.tvCleanupPreferences?.manualOverrides || {},
+  },
+  movieCleanupPreferences: {
+    ...defaultMovieCleanupPreferences,
+    ...(data.movieCleanupPreferences || {}),
+    movies: data.movieCleanupPreferences?.movies || {},
   },
 });
 
@@ -187,6 +198,28 @@ export function useServiceConfig() {
     }
   };
 
+  const updateMovieCleanupPreferences = async (nextPreferences) => {
+    const previous = queryClient.getQueryData(APP_CONFIG_QUERY_KEY) || getDefaultAppConfig();
+    const normalized = {
+      ...defaultMovieCleanupPreferences,
+      ...nextPreferences,
+      movies: nextPreferences?.movies || {},
+    };
+
+    setCachedAppConfig((current) => ({
+      ...current,
+      movieCleanupPreferences: normalized,
+    }));
+
+    try {
+      await appConfigApi.updateMovieCleanupPreferences(normalized);
+    } catch (error) {
+      queryClient.setQueryData(APP_CONFIG_QUERY_KEY, previous);
+      console.error('Failed to save movie cleanup preferences', error);
+      throw error;
+    }
+  };
+
   const getService = (service) => appConfig.services[service];
 
   const isServiceReady = (service) => {
@@ -201,6 +234,7 @@ export function useServiceConfig() {
     mediaBrowserPreferences: appConfig.mediaBrowserPreferences,
     optimizationPreferences: appConfig.optimizationPreferences,
     tvCleanupPreferences: appConfig.tvCleanupPreferences,
+    movieCleanupPreferences: appConfig.movieCleanupPreferences,
     isLoadingConfig: isLoading && !data,
     isFetchingConfig: isFetching,
     updateService,
@@ -209,6 +243,7 @@ export function useServiceConfig() {
     updateMediaBrowserPreferences,
     updateOptimizationPreferences,
     updateTvCleanupPreferences,
+    updateMovieCleanupPreferences,
     getService,
     isServiceReady,
   };

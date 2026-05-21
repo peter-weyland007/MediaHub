@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { fetchMovieDetailsData, getServiceCacheKey } from '@/lib/mediaQueries';
 import EmptyState from '@/components/shared/EmptyState';
@@ -23,6 +24,9 @@ import {
   getMovieRatings,
   getPrimaryMovieImage,
 } from '@/components/shared/movieDetails';
+import { buildMovieCleanupPlan, getMovieCleanupMode, MOVIE_CLEANUP_MODE_OPTIONS } from '@/components/shared/movieCleanup';
+import { runMovieCleanupAction } from '@/components/shared/movieCleanupActions';
+import { toast } from 'sonner';
 
 function DetailFactGrid({ items }) {
   return (
@@ -40,7 +44,12 @@ function DetailFactGrid({ items }) {
 export default function MovieDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { config, isServiceReady } = useServiceConfig();
+  const {
+    config,
+    isServiceReady,
+    movieCleanupPreferences,
+    updateMovieCleanupPreferences,
+  } = useServiceConfig();
 
   const ready = isServiceReady('radarr');
   const tautulliReady = isServiceReady('tautulli');
@@ -65,9 +74,60 @@ export default function MovieDetails() {
   const posterImage = useMemo(() => getPrimaryMovieImage(movie || {}, config.radarr || {}), [movie, config.radarr]);
   const ratingItems = useMemo(() => getMovieRatings(movie || {}), [movie]);
   const factItems = useMemo(() => getMovieFactItems(movie || {}), [movie]);
+  const [oneAndDoneOpen, setOneAndDoneOpen] = useState(false);
   const [playbackOpen, setPlaybackOpen] = useState(false);
+  const [actioningCleanup, setActioningCleanup] = useState(false);
   const playbackCards = useMemo(() => getMoviePlaybackCards(movie || {}, movie?.historyRows || [], movie?.plexSessions || []), [movie]);
   const playbackSummary = useMemo(() => buildMoviePlaybackSummary(movie || {}, movie?.historyRows || [], movie?.plexSessions || []), [movie]);
+  const cleanupMode = useMemo(() => getMovieCleanupMode(movieCleanupPreferences, id), [movieCleanupPreferences, id]);
+  const cleanupPlan = useMemo(() => buildMovieCleanupPlan({
+    movie,
+    policyMode: cleanupMode,
+    historyRows: movie?.historyRows || [],
+    watchedThresholdPercent: movieCleanupPreferences?.watchedThresholdPercent,
+    waitDays: movieCleanupPreferences?.waitDays,
+  }), [movie, cleanupMode, movieCleanupPreferences]);
+
+  const updateMoviePolicy = async (mode) => {
+    const nextPreferences = {
+      ...movieCleanupPreferences,
+      movies: {
+        ...(movieCleanupPreferences?.movies || {}),
+        [String(id)]: { mode },
+      },
+    };
+    const savedLabel = MOVIE_CLEANUP_MODE_OPTIONS.find((option) => option.value === mode)?.label || mode;
+
+    try {
+      await updateMovieCleanupPreferences(nextPreferences);
+      toast.success(`Saved cleanup policy: ${savedLabel}`);
+    } catch {
+      toast.error('Failed to save cleanup policy');
+    }
+  };
+
+  const applyMovieCleanup = async () => {
+    if (!cleanupPlan.isEligible) {
+      toast('This movie is not eligible for cleanup yet.');
+      return;
+    }
+
+    setActioningCleanup(true);
+    try {
+      await runMovieCleanupAction({
+        radarrConfig: config.radarr,
+        movie,
+        mode: cleanupMode,
+      });
+      const cleanupActionLabel = cleanupMode === 'delete-unmonitor' ? 'Delete file + unmonitor' : 'Keep after watched';
+      toast.success(`Applied movie cleanup: ${cleanupActionLabel}`);
+      await refetch();
+    } catch (actionError) {
+      toast.error(actionError.message || 'Failed to apply movie cleanup');
+    } finally {
+      setActioningCleanup(false);
+    }
+  };
 
   if (!ready) {
     return (
@@ -210,6 +270,54 @@ export default function MovieDetails() {
               <DetailFactGrid items={factItems.slice(4)} />
             </CardContent>
           </Card>
+
+          <Collapsible open={oneAndDoneOpen} onOpenChange={setOneAndDoneOpen}>
+            <Card className="border-border/70 bg-card/95">
+              <CollapsibleTrigger asChild>
+                <button type="button" className="w-full text-left">
+                  <CardHeader className="cursor-pointer select-none">
+                    <CardTitle className="flex items-center justify-between gap-3">
+                      <span>One-and-done</span>
+                      <Badge variant="outline">{oneAndDoneOpen ? 'Hide' : 'Show'}</Badge>
+                    </CardTitle>
+                  </CardHeader>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">Opt-in cleanup for documentaries or other watch-once titles • Tautulli watched signal • {movieCleanupPreferences.watchedThresholdPercent}% threshold • wait {movieCleanupPreferences.waitDays} day{movieCleanupPreferences.waitDays === 1 ? '' : 's'}</p>
+                      <Select value={cleanupMode} onValueChange={updateMoviePolicy}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select movie cleanup mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MOVIE_CLEANUP_MODE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button onClick={applyMovieCleanup} disabled={actioningCleanup || cleanupMode === 'keep-all'}>
+                      {actioningCleanup ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Delete now + unmonitor
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3"><p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Policy</p><p className="mt-1 text-sm font-medium">{MOVIE_CLEANUP_MODE_OPTIONS.find((option) => option.value === cleanupMode)?.label || 'Keep after watched'}</p></div>
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3"><p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Watched</p><p className="mt-1 text-sm font-medium">{cleanupPlan.isWatched ? 'Yes' : 'No'}</p></div>
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3"><p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Eligible</p><p className="mt-1 text-sm font-medium">{cleanupPlan.isEligible ? 'Yes' : 'No'}</p></div>
+                    <div className="rounded-lg border border-border/70 bg-muted/20 p-3"><p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Last watched</p><p className="mt-1 text-sm font-medium">{formatMoviePlaybackDate(cleanupPlan.lastWatchedAt)}</p></div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Modes: Keep after watched • Delete file + unmonitor after watched</p>
+                  {!tautulliReady && (
+                    <p className="text-sm text-muted-foreground">Configure Tautulli in Settings before watched-based cleanup can trigger automatically.</p>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
           <Collapsible open={playbackOpen} onOpenChange={setPlaybackOpen}>
             <Card className="border-border/70 bg-card/95">

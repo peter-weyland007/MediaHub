@@ -165,6 +165,35 @@ test('service proxy forwards Tautulli requests with query-string API auth', asyn
   });
 });
 
+test('service proxy tolerates empty successful JSON responses without turning them into proxy failures', async () => {
+  const paths = createTempPaths();
+  writeFakeDist(paths.distPath);
+
+  await withUpstream((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end('');
+  }, async (upstreamUrl) => {
+    await withServer({ dbPath: paths.dbPath, distPath: paths.distPath }, async (baseUrl) => {
+      const saveResponse = await fetch(`${baseUrl}/api/app-config/services/radarr`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: upstreamUrl, apiKey: 'radarr-secret', enabled: true }),
+      });
+      assert.equal(saveResponse.status, 200);
+
+      const proxyResponse = await fetch(`${baseUrl}/api/service-proxy/radarr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'DELETE', path: '/moviefile/123' }),
+      });
+
+      assert.equal(proxyResponse.status, 200);
+      assert.equal(await proxyResponse.text(), '');
+      assert.ok(!(proxyResponse.headers.get('content-type') ?? '').includes('application/json'));
+    });
+  });
+});
+
 test('service proxy returns unconfigured when no saved or override config is available', async () => {
   const paths = createTempPaths();
   writeFakeDist(paths.distPath);

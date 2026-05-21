@@ -37,6 +37,13 @@ test('Movies and TV pages support a saved browse-table toggle plus sortable tabl
   }
 });
 
+test('Movies table runtime column uses runtime severity helpers for color-coded delta cues', () => {
+  const source = read('src/pages/Movies.jsx');
+  assert.match(source, /getMovieRuntimeIssue/);
+  assert.match(source, /getMovieRuntimeSeverity/);
+  assert.match(source, /Delta \{runtimeIssue\.delta\}/);
+});
+
 test('Movies and TV pages expose a visible library search input wired into display filtering', () => {
   const expectations = [
     ['src/pages/Movies.jsx', /Search library\.\.\./, /librarySearchTerm/, /filterMoviesForDisplay/],

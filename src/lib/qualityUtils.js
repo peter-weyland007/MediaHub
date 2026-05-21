@@ -279,8 +279,8 @@ export function getOptimizationRecommendation(item, optimizationPreferences = {}
         status: 'poor',
         label: 'Missing File',
         color: 'red',
-        action: 'replace',
-        actionLabel: 'Find Better Release',
+        action: 'search',
+        actionLabel: 'Search Missing Release',
         issues: [compactIssue('No local file in Radarr', 'poor')],
         score: 0,
       };

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { useServiceConfig } from '@/lib/useServiceConfig';
 import { radarrApi, sonarrApi, tautulliApi } from '@/lib/serviceApi';
 import {
@@ -12,6 +13,7 @@ import {
   isOptimizationCandidate,
   MEDIA_NEXUS_OPTIMIZATION_PROFILE_NAME,
 } from '@/lib/qualityUtils';
+import { filterOptimizationItemsForDisplay } from '@/lib/mediaSearch';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
 import QualityProfileSelector from '@/components/quality/QualityProfileSelector';
@@ -23,6 +25,31 @@ const strategyOptions = [
   { value: 'space', label: 'Save Disk Space', hint: 'Favor smaller encodes and oversized-file cleanup', icon: HardDrive },
   { value: 'compatibility', label: 'Plex Compatibility', hint: 'Favor formats that direct play on more Plex clients', icon: PlayCircle },
 ];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function pollCommandUntilSettled(fetchCommand, { maxAttempts = 8, delayMs = 1500 } = {}) {
+  let lastCommand = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const polledCommand = await fetchCommand();
+    lastCommand = polledCommand;
+
+    if (!polledCommand) {
+      break;
+    }
+
+    if (['completed', 'failed', 'aborted'].includes(String(polledCommand.status || '').toLowerCase())) {
+      return polledCommand;
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  return lastCommand;
+}
 
 export default function QualityManager() {
   const {
@@ -40,8 +67,10 @@ export default function QualityManager() {
   const [series, setSeries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState(null);
+  const [lastActionResult, setLastActionResult] = useState(null);
   const [applyingProfiles, setApplyingProfiles] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [librarySearchTerm, setLibrarySearchTerm] = useState('');
   const [tab, setTab] = useState('movies');
   const [playbackEvidence, setPlaybackEvidence] = useState({
     movies: { plays: 0, transcodes: 0, directPlays: 0, lastUser: null },
@@ -202,21 +231,84 @@ export default function QualityManager() {
   };
 
   const handleAction = async (item, action) => {
+    const actionLabel = item?.remediation?.actionLabel || (action === 'replace' ? 'Find Better Release' : 'Search Alternatives');
+    const shouldRun = window.confirm(`${actionLabel} for ${item.title}?`);
+    if (!shouldRun) {
+      return;
+    }
+
+    const startingMessage = item._type === 'movie' && !item.movieFile
+      ? `Starting Radarr search for missing movie: ${item.title}`
+      : action === 'replace'
+        ? `Starting search for a better release: ${item.title}`
+        : `Starting alternative search for ${item.title}`;
+
     setActioningId(item.id);
+    setLastActionResult({
+      itemTitle: item.title,
+      action,
+      status: 'starting',
+      message: startingMessage,
+      commandId: null,
+    });
+    toast.success(startingMessage);
+
     try {
-      if (item._type === 'movie') {
-        await radarrApi.commandSearch(config.radarr, [item.id]);
-      } else {
-        await sonarrApi.commandSearch(config.sonarr, item.id);
+      const command = item._type === 'movie'
+        ? await radarrApi.commandSearch(config.radarr, [item.id])
+        : await sonarrApi.commandSearch(config.sonarr, item.id);
+
+      const queuedMessage = command?.message
+        || (item._type === 'movie' && !item.movieFile
+          ? `Queued Radarr search for missing movie: ${item.title}`
+          : action === 'replace'
+            ? `Queued search for a more optimal release: ${item.title}`
+            : `Searching alternatives for ${item.title}`);
+
+      setLastActionResult({
+        itemTitle: item.title,
+        action,
+        status: command?.status || 'queued',
+        message: queuedMessage,
+        commandId: command?.id || null,
+      });
+
+      toast.success(queuedMessage);
+
+      const monitorCommand = async (commandId) => {
+        if (!commandId) {
+          return null;
+        }
+
+        const fetchCommand = () => (item._type === 'movie'
+          ? radarrApi.getCommand(config.radarr, commandId)
+          : sonarrApi.getCommand(config.sonarr, commandId));
+
+        return pollCommandUntilSettled(fetchCommand);
+      };
+
+      const polledCommand = await monitorCommand(command?.id);
+      if (polledCommand) {
+        setLastActionResult({
+          itemTitle: item.title,
+          action,
+          status: polledCommand?.status || command?.status || 'queued',
+          message: polledCommand?.message || queuedMessage,
+          commandId: polledCommand?.id || command?.id || null,
+        });
       }
 
-      toast.success(
-        action === 'replace'
-          ? `Queued search for a more optimal release: ${item.title}`
-          : `Searching alternatives for ${item.title}`
-      );
+      await fetchAll();
     } catch (error) {
-      toast.error(`Failed: ${error.message}`);
+      const failureMessage = `Failed: ${error.message}`;
+      setLastActionResult({
+        itemTitle: item.title,
+        action,
+        status: 'failed',
+        message: failureMessage,
+        commandId: null,
+      });
+      toast.error(failureMessage);
     }
     setActioningId(null);
   };
@@ -280,6 +372,7 @@ export default function QualityManager() {
   const minorCount = allItems.filter((item) => item.remediation.status === 'minor').length;
   const okCount = allItems.filter((item) => item.remediation.status === 'ok').length;
   const currentItems = tab === 'movies' ? enrichedMovies : enrichedSeries;
+  const filteredCurrentItems = filterOptimizationItemsForDisplay(filtered(currentItems), librarySearchTerm);
   const strategyMeta = strategyOptions.find((option) => option.value === optimizationPrefs.strategy) || strategyOptions[0];
 
   return (
@@ -456,6 +549,19 @@ export default function QualityManager() {
         </CardContent>
       </Card>
 
+      {lastActionResult ? (
+        <Card className="mb-4 border-border/70 bg-card/95">
+          <CardContent className="p-4">
+            <p className="text-sm font-medium text-foreground">Last remediation action</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {lastActionResult.itemTitle} • {lastActionResult.status}
+              {lastActionResult.commandId ? ` • Command ${lastActionResult.commandId}` : ''}
+            </p>
+            <p className="mt-2 text-sm text-foreground/90">{lastActionResult.message}</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
@@ -464,7 +570,13 @@ export default function QualityManager() {
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input
+            value={librarySearchTerm}
+            onChange={(event) => setLibrarySearchTerm(event.target.value)}
+            placeholder="Search library..."
+            className="w-52"
+          />
           <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger className="w-40">
               <SelectValue />
@@ -495,11 +607,11 @@ export default function QualityManager() {
       ) : (
         <Card>
           <CardContent className="p-0">
-            {filtered(currentItems).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-12">No items match this filter.</p>
+            {filteredCurrentItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-12">No items match this filter or search.</p>
             ) : (
               <div className="px-4">
-                {filtered(currentItems).map((item) => (
+                {filteredCurrentItems.map((item) => (
                   <RemediationRow
                     key={item.id}
                     item={item}

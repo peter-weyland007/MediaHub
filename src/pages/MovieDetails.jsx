@@ -22,10 +22,11 @@ import {
   getMovieFactItems,
   getMoviePlaybackCards,
   getMovieRatings,
+  getMovieRuntimeIssue,
   getPrimaryMovieImage,
 } from '@/components/shared/movieDetails';
 import { buildMovieCleanupPlan, getMovieCleanupMode, MOVIE_CLEANUP_MODE_OPTIONS } from '@/components/shared/movieCleanup';
-import { runMovieCleanupAction } from '@/components/shared/movieCleanupActions';
+import { runMovieCleanupAction, runMovieReplacementAction } from '@/components/shared/movieCleanupActions';
 import { toast } from 'sonner';
 
 function DetailFactGrid({ items }) {
@@ -34,7 +35,38 @@ function DetailFactGrid({ items }) {
       {items.map((item) => (
         <div key={item.label} className="rounded-lg border border-border/70 bg-muted/20 p-3">
           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{item.label}</p>
-          <p className="mt-1 text-sm font-medium text-foreground break-words">{item.value}</p>
+          {item.value ? <p className="mt-1 text-sm font-medium text-foreground break-words">{item.value}</p> : null}
+          {Array.isArray(item.inlineParts) && item.inlineParts.length > 0 ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {item.inlineParts.map((part, index) => (
+                <React.Fragment key={`${item.label}-inline-${index}`}>
+                  {index > 0 ? <span className="mx-1.5">·</span> : null}
+                  <span className="font-medium text-foreground">{part.value}</span>
+                </React.Fragment>
+              ))}
+            </p>
+          ) : Array.isArray(item.equation) && item.equation.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              {item.equation.map((part, index) => (
+                <React.Fragment key={`${item.label}-equation-${index}`}>
+                  {index > 0 ? <span className="text-muted-foreground">{part.operator}</span> : null}
+                  <span className="rounded-md border border-border/60 bg-background/40 px-2 py-1">
+                    <span className="mr-1 uppercase tracking-[0.14em] text-muted-foreground">{part.label}</span>
+                    <span className="font-medium text-foreground">{part.value}</span>
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+          ) : Array.isArray(item.details) && item.details.length > 0 ? (
+            <div className="mt-3 space-y-1.5">
+              {item.details.map((detail) => (
+                <div key={`${item.label}-${detail.label}`} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="uppercase tracking-[0.14em] text-muted-foreground">{detail.label}</span>
+                  <span className="text-right font-medium text-foreground">{detail.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>
@@ -74,9 +106,11 @@ export default function MovieDetails() {
   const posterImage = useMemo(() => getPrimaryMovieImage(movie || {}, config.radarr || {}), [movie, config.radarr]);
   const ratingItems = useMemo(() => getMovieRatings(movie || {}), [movie]);
   const factItems = useMemo(() => getMovieFactItems(movie || {}), [movie]);
+  const runtimeIssue = useMemo(() => getMovieRuntimeIssue(movie || {}), [movie]);
   const [oneAndDoneOpen, setOneAndDoneOpen] = useState(false);
   const [playbackOpen, setPlaybackOpen] = useState(false);
   const [actioningCleanup, setActioningCleanup] = useState(false);
+  const [actioningReplacement, setActioningReplacement] = useState(false);
   const playbackCards = useMemo(() => getMoviePlaybackCards(movie || {}, movie?.historyRows || [], movie?.plexSessions || []), [movie]);
   const playbackSummary = useMemo(() => buildMoviePlaybackSummary(movie || {}, movie?.historyRows || [], movie?.plexSessions || []), [movie]);
   const cleanupMode = useMemo(() => getMovieCleanupMode(movieCleanupPreferences, id), [movieCleanupPreferences, id]);
@@ -126,6 +160,27 @@ export default function MovieDetails() {
       toast.error(actionError.message || 'Failed to apply movie cleanup');
     } finally {
       setActioningCleanup(false);
+    }
+  };
+
+  const replaceMovieFile = async () => {
+    if (!runtimeIssue.isSuspicious) {
+      toast('This movie does not currently look like a bad runtime mismatch.');
+      return;
+    }
+
+    setActioningReplacement(true);
+    try {
+      await runMovieReplacementAction({
+        radarrConfig: config.radarr,
+        movie,
+      });
+      toast.success('Deleted the current file and queued a fresh Radarr search.');
+      await refetch();
+    } catch (actionError) {
+      toast.error(actionError.message || 'Failed to replace the current movie file');
+    } finally {
+      setActioningReplacement(false);
     }
   };
 
@@ -270,6 +325,25 @@ export default function MovieDetails() {
               <DetailFactGrid items={factItems.slice(4)} />
             </CardContent>
           </Card>
+
+          {runtimeIssue.isSuspicious ? (
+            <Card className="border-amber-500/40 bg-card/95">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between gap-3">
+                  <span>Potential bad file</span>
+                  <Badge variant="secondary">Delta {runtimeIssue.delta}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">Delete the current file, keep this movie monitored, and ask Radarr to search again.</p>
+                <p className="text-xs text-muted-foreground">Runtime says {runtimeIssue.fileRuntime} file • {runtimeIssue.metaRuntime} metadata • {runtimeIssue.delta} delta.</p>
+                <Button onClick={replaceMovieFile} disabled={actioningReplacement}>
+                  {actioningReplacement ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Replace bad file
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Collapsible open={oneAndDoneOpen} onOpenChange={setOneAndDoneOpen}>
             <Card className="border-border/70 bg-card/95">

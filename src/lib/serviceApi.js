@@ -13,9 +13,12 @@ const parseProxyResponse = async (response, serviceName) => {
   if (!response.ok) {
     let details = '';
     try {
-      /** @type {ProxyErrorPayload} */
-      const body = await response.json();
-      details = body?.error ? `: ${body.error}` : '';
+      const text = await response.text();
+      if (text) {
+        /** @type {ProxyErrorPayload} */
+        const body = JSON.parse(text);
+        details = body?.error ? `: ${body.error}` : '';
+      }
     } catch {
       details = '';
     }
@@ -27,14 +30,14 @@ const parseProxyResponse = async (response, serviceName) => {
     return null;
   }
 
-  const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    return response.json();
-  }
-
   const text = await response.text();
   if (!text) {
     return null;
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text);
   }
 
   try {

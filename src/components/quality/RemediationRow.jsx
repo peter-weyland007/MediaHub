@@ -65,7 +65,7 @@ export default function RemediationRow({ item, type, remediation, onAction, acti
           )}
         >
           {actioning ? (
-            <RefreshCw className="w-3 h-3 animate-spin" />
+            <><RefreshCw className="w-3 h-3 animate-spin" />Working…</>
           ) : remediation.action === 'replace' ? (
             <><XCircle className="w-3 h-3 mr-1" />{remediation.actionLabel || 'Replace'}</>
           ) : (

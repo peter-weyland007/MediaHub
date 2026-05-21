@@ -38,3 +38,16 @@ export const filterMusicArtistsForDisplay = (artists, query) => filterBySearchTe
   artist?.path,
   artist?.foreignArtistId,
 ]);
+
+export const filterOptimizationItemsForDisplay = (items, query) => filterBySearchTerm(items, query, (item) => [
+  item?.title,
+  item?.sortTitle,
+  item?.originalTitle,
+  item?.year,
+  item?.path,
+  item?.network,
+  item?.studio,
+  item?.currentQuality,
+  item?.preferredProfile,
+  item?.remediation?.label,
+]);

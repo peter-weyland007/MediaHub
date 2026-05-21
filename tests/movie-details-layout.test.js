@@ -9,6 +9,8 @@ import {
   getPrimaryMovieImage,
   buildMovieExternalLinks,
   getMovieFactItems,
+  getMovieRuntimeIssue,
+  getMovieRuntimeSeverity,
   getMovieRatings,
   resolveLibraryItemDetailsPath,
   resolveLibrarySeriesDetailsPath,
@@ -62,11 +64,74 @@ test('series detail helpers prefer title slugs for Sonarr links', () => {
   });
 });
 
+test('movie detail helpers flag suspicious runtime mismatches that should be replaced', () => {
+  assert.deepEqual(getMovieRuntimeIssue({
+    runtime: 98,
+    movieFile: { mediaInfo: { runTime: '0:26:40' } },
+  }), {
+    fileRuntime: '27m',
+    metaRuntime: '1h 38m',
+    delta: '-71m 20s',
+    deltaSeconds: -4280,
+    deltaRatio: 0.7278911564625851,
+    hasBothRuntimes: true,
+    isSuspicious: true,
+    reason: 'Large runtime mismatch',
+  });
+
+  assert.deepEqual(getMovieRuntimeIssue({
+    runtime: 117,
+    movieFile: { mediaInfo: { runTime: '1:57:00' } },
+  }), {
+    fileRuntime: '1h 57m',
+    metaRuntime: '1h 57m',
+    delta: 'Matches metadata',
+    deltaSeconds: 0,
+    deltaRatio: 0,
+    hasBothRuntimes: true,
+    isSuspicious: false,
+    reason: '',
+  });
+});
+
+test('movie runtime severity classifies green yellow and red tolerances for list views', () => {
+  assert.deepEqual(getMovieRuntimeSeverity({
+    runtime: 117,
+    movieFile: { mediaInfo: { runTime: '1:57:00' } },
+  }), {
+    tone: 'green',
+    label: 'Runtime looks good',
+    className: 'text-emerald-300',
+    deltaClassName: 'text-emerald-400/80',
+  });
+
+  assert.deepEqual(getMovieRuntimeSeverity({
+    runtime: 120,
+    movieFile: { mediaInfo: { runTime: '1:48:00' } },
+  }), {
+    tone: 'yellow',
+    label: 'Runtime looks a little off',
+    className: 'text-amber-300',
+    deltaClassName: 'text-amber-400/80',
+  });
+
+  assert.deepEqual(getMovieRuntimeSeverity({
+    runtime: 98,
+    movieFile: { mediaInfo: { runTime: '0:26:40' } },
+  }), {
+    tone: 'red',
+    label: 'Runtime looks wrong',
+    className: 'text-rose-300',
+    deltaClassName: 'text-rose-400/80',
+  });
+});
+
 test('movie detail helpers expose key facts for studio, runtime, status, quality, and branded rating metadata', () => {
   const facts = getMovieFactItems({
     studio: 'DNA Films',
     status: 'released',
     minimumAvailability: 'released',
+    runtime: 120,
     movieFile: {
       size: 7655262256,
       quality: { quality: { name: 'WEBDL-1080p' } },
@@ -82,9 +147,27 @@ test('movie detail helpers expose key facts for studio, runtime, status, quality
     'Video',
     'Audio',
     'File size',
-    'File runtime',
+    'Runtime (File • Meta • Delta)',
   ]);
   assert.equal(facts.find((item) => item.label === 'Quality')?.value, 'WEBDL-1080p');
+  assert.equal(facts.find((item) => item.label === 'Runtime (File • Meta • Delta)')?.value, '');
+  assert.deepEqual(facts.find((item) => item.label === 'Runtime (File • Meta • Delta)')?.inlineParts, [
+    { label: 'File', value: '1h 57m' },
+    { label: 'Meta', value: '2h 0m' },
+    { label: 'Delta', value: '-2m 33s' },
+  ]);
+
+  const matchingFacts = getMovieFactItems({
+    runtime: 117,
+    movieFile: {
+      mediaInfo: { runTime: '1:57:00' },
+    },
+  });
+  assert.deepEqual(matchingFacts.find((item) => item.label === 'Runtime (File • Meta • Delta)')?.inlineParts, [
+    { label: 'File', value: '1h 57m' },
+    { label: 'Meta', value: '1h 57m' },
+    { label: 'Delta', value: 'Matches metadata' },
+  ]);
 
   const ratings = getMovieRatings({
     ratings: {
@@ -132,6 +215,7 @@ test('App routes and media library pages wire up shared movie and TV details exp
   const moviesSource = read('src/pages/Movies.jsx');
   const tvShowsSource = read('src/pages/TvShows.jsx');
 
+  assert.match(appSource, /import \{ Toaster \} from '@\/components\/ui\/sonner';/);
   assert.match(appSource, /import MovieDetails from '@\/pages\/MovieDetails';/);
   assert.match(appSource, /import TvShowDetails from '@\/pages\/TvShowDetails';/);
   assert.match(appSource, /path="\/movies\/:id" element={<MovieDetails \/>}/);
@@ -183,6 +267,9 @@ test('movie details and TV details pages load service metadata and render their 
   assert.doesNotMatch(movieSource, /<CardTitle>Ratings<\/CardTitle>/);
   assert.match(movieSource, /Playback & watch history/);
   assert.match(movieSource, /Technical details/);
+  assert.match(movieSource, /Potential bad file/);
+  assert.match(movieSource, /Replace bad file/);
+  assert.match(movieSource, /Delete the current file, keep this movie monitored, and ask Radarr to search again\./);
   assert.match(movieSource, /Open in Radarr/);
   assert.match(movieSource, /IMDb/);
   assert.match(movieSource, /TMDb/);

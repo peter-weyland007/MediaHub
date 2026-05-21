@@ -5,6 +5,7 @@ import {
   filterMoviesForDisplay,
   filterTvShowsForDisplay,
   filterMusicArtistsForDisplay,
+  filterOptimizationItemsForDisplay,
 } from '../src/lib/mediaSearch.js';
 
 test('movie library search matches title, year, and path case-insensitively', () => {
@@ -41,4 +42,28 @@ test('music library search matches artist names and paths case-insensitively', (
   assert.deepEqual(filterMusicArtistsForDisplay(artists, 'daft').map((artist) => artist.artistName), ['Daft Punk']);
   assert.deepEqual(filterMusicArtistsForDisplay(artists, 'zimmer').map((artist) => artist.artistName), ['Hans Zimmer']);
   assert.deepEqual(filterMusicArtistsForDisplay(artists, 'music').map((artist) => artist.artistName), ['The Beatles', 'Daft Punk']);
+});
+
+test('optimization search matches movie and tv rows by title, path, and profile metadata', () => {
+  const items = [
+    {
+      title: 'Alien',
+      path: '/movies/Alien (1979)',
+      currentQuality: 'Bluray-1080p',
+      preferredProfile: 'MediaHub Profile',
+      remediation: { label: 'Replace oversized file' },
+    },
+    {
+      title: 'Andor',
+      network: 'Disney+',
+      currentQuality: 'WEB-1080p',
+      preferredProfile: 'TV Balanced',
+      remediation: { label: 'Ready' },
+    },
+  ];
+
+  assert.deepEqual(filterOptimizationItemsForDisplay(items, 'alien').map((item) => item.title), ['Alien']);
+  assert.deepEqual(filterOptimizationItemsForDisplay(items, 'disney').map((item) => item.title), ['Andor']);
+  assert.deepEqual(filterOptimizationItemsForDisplay(items, 'mediahub profile').map((item) => item.title), ['Alien']);
+  assert.deepEqual(filterOptimizationItemsForDisplay(items, 'oversized').map((item) => item.title), ['Alien']);
 });

@@ -1,4 +1,4 @@
-/** @typedef {{ id?: number, title?: string, year?: number, images?: Array<{ coverType?: string, remoteUrl?: string, url?: string }>, movieFile?: { size?: number, quality?: { quality?: { name?: string } }, mediaInfo?: { videoCodec?: string, audioCodec?: string, runTime?: string } }, ratings?: Record<string, { value?: number|string }>, imdbId?: string, tmdbId?: number|string, titleSlug?: string, studio?: string, status?: string, minimumAvailability?: string }} Movie */
+/** @typedef {{ id?: number, title?: string, year?: number, runtime?: number, images?: Array<{ coverType?: string, remoteUrl?: string, url?: string }>, movieFile?: { size?: number, quality?: { quality?: { name?: string } }, mediaInfo?: { videoCodec?: string, audioCodec?: string, runTime?: string } }, ratings?: Record<string, { value?: number|string }>, imdbId?: string, tmdbId?: number|string, titleSlug?: string, studio?: string, status?: string, minimumAvailability?: string }} Movie */
 /** @typedef {{ url?: string }} ServiceConfig */
 /** @typedef {{ type?: string, title?: string, year?: number }} LibraryItem */
 /** @typedef {{ title?: string, full_title?: string, original_title?: string, year?: number|string, originally_available_at?: string, user?: string, friendly_name?: string, date?: number|string, stopped?: number|string, transcode_decision?: string, percent_complete?: number|string, product?: string, player?: string, platform?: string }} TautulliMovieHistoryRow */
@@ -27,6 +27,59 @@ export function formatMovieFileSize(bytes) {
   }
 
   return `${(size / (1024 ** 3)).toFixed(1)} GB`;
+}
+
+function parseMovieRuntimeToSeconds(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return 0;
+  }
+
+  const parts = raw.split(':').map((part) => Number(part));
+  if (parts.some((part) => !Number.isFinite(part))) {
+    return 0;
+  }
+
+  if (parts.length === 3) {
+    return (parts[0] * 60 * 60) + (parts[1] * 60) + parts[2];
+  }
+
+  if (parts.length === 2) {
+    return (parts[0] * 60) + parts[1];
+  }
+
+  return 0;
+}
+
+function formatMovieFileRuntime(value) {
+  const totalSeconds = parseMovieRuntimeToSeconds(value);
+  if (!totalSeconds) {
+    return '—';
+  }
+
+  const totalMinutes = Math.round(totalSeconds / 60);
+  return formatMovieRuntime(totalMinutes);
+}
+
+function formatMovieRuntimeDelta(movieRuntimeMinutes, fileRuntime) {
+  const metadataSeconds = Number(movieRuntimeMinutes || 0) * 60;
+  const fileSeconds = parseMovieRuntimeToSeconds(fileRuntime);
+  if (!metadataSeconds || !fileSeconds) {
+    return '—';
+  }
+
+  const deltaSeconds = fileSeconds - metadataSeconds;
+  if (!deltaSeconds) {
+    return 'Matches metadata';
+  }
+
+  const sign = deltaSeconds > 0 ? '+' : '-';
+  const absSeconds = Math.abs(deltaSeconds);
+  const minutes = Math.floor(absSeconds / 60);
+  const seconds = absSeconds % 60;
+  const minutePart = minutes ? `${minutes}m` : '0m';
+  const secondPart = `${seconds}s`;
+  return `${sign}${minutePart} ${secondPart}`;
 }
 
 /**
@@ -66,6 +119,71 @@ export function buildMovieExternalLinks(movie = {}, serviceConfig = {}) {
   };
 }
 
+export function getMovieRuntimeIssue(movie = {}) {
+  const fileRuntimeRaw = movie?.movieFile?.mediaInfo?.runTime;
+  const metadataMinutes = Number(movie?.runtime || 0);
+  const metadataSeconds = metadataMinutes * 60;
+  const fileSeconds = parseMovieRuntimeToSeconds(fileRuntimeRaw);
+  const fileRuntime = formatMovieFileRuntime(fileRuntimeRaw);
+  const metaRuntime = formatMovieRuntime(metadataMinutes);
+  const delta = formatMovieRuntimeDelta(metadataMinutes, fileRuntimeRaw);
+  const deltaSeconds = fileSeconds && metadataSeconds ? fileSeconds - metadataSeconds : 0;
+  const absDeltaSeconds = Math.abs(deltaSeconds);
+  const largerRuntimeSeconds = Math.max(fileSeconds, metadataSeconds, 1);
+  const deltaRatio = absDeltaSeconds / largerRuntimeSeconds;
+  const isSuspicious = Boolean(fileSeconds && metadataSeconds) && (absDeltaSeconds >= (15 * 60) || deltaRatio >= 0.25);
+
+  return {
+    fileRuntime,
+    metaRuntime,
+    delta,
+    deltaSeconds,
+    deltaRatio,
+    hasBothRuntimes: Boolean(fileSeconds && metadataSeconds),
+    isSuspicious,
+    reason: isSuspicious ? 'Large runtime mismatch' : '',
+  };
+}
+
+export function getMovieRuntimeSeverity(movie = {}) {
+  const runtimeIssue = getMovieRuntimeIssue(movie);
+  const absDeltaSeconds = Math.abs(runtimeIssue.deltaSeconds);
+
+  if (!runtimeIssue.hasBothRuntimes) {
+    return {
+      tone: 'neutral',
+      label: 'Runtime needs more data',
+      className: 'text-muted-foreground',
+      deltaClassName: 'text-muted-foreground',
+    };
+  }
+
+  if (absDeltaSeconds >= (15 * 60) || runtimeIssue.deltaRatio >= 0.25) {
+    return {
+      tone: 'red',
+      label: 'Runtime looks wrong',
+      className: 'text-rose-300',
+      deltaClassName: 'text-rose-400/80',
+    };
+  }
+
+  if (absDeltaSeconds >= (5 * 60) || runtimeIssue.deltaRatio >= 0.10) {
+    return {
+      tone: 'yellow',
+      label: 'Runtime looks a little off',
+      className: 'text-amber-300',
+      deltaClassName: 'text-amber-400/80',
+    };
+  }
+
+  return {
+    tone: 'green',
+    label: 'Runtime looks good',
+    className: 'text-emerald-300',
+    deltaClassName: 'text-emerald-400/80',
+  };
+}
+
 /**
  * @param {Movie} [movie]
  */
@@ -73,6 +191,7 @@ export function getMovieFactItems(movie = {}) {
   const movieFile = movie.movieFile || {};
   const qualityName = movieFile.quality?.quality?.name || '';
   const mediaInfo = movieFile.mediaInfo || {};
+  const runtimeIssue = getMovieRuntimeIssue(movie);
 
   return [
     { label: 'Studio', value: movie.studio || 'Unknown' },
@@ -82,7 +201,15 @@ export function getMovieFactItems(movie = {}) {
     { label: 'Video', value: mediaInfo.videoCodec || '—' },
     { label: 'Audio', value: mediaInfo.audioCodec || '—' },
     { label: 'File size', value: formatMovieFileSize(movieFile.size) },
-    { label: 'File runtime', value: mediaInfo.runTime || '—' },
+    {
+      label: 'Runtime (File • Meta • Delta)',
+      value: '',
+      inlineParts: [
+        { label: 'File', value: runtimeIssue.fileRuntime },
+        { label: 'Meta', value: runtimeIssue.metaRuntime },
+        { label: 'Delta', value: runtimeIssue.delta },
+      ],
+    },
   ];
 }
 

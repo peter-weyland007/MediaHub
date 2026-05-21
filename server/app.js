@@ -102,14 +102,14 @@ const readProxyResponse = async (response) => {
     return null;
   }
 
-  const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    return response.json();
-  }
-
   const text = await response.text();
   if (!text) {
     return null;
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text);
   }
 
   try {
@@ -283,13 +283,14 @@ export const createApp = ({
       });
 
       const responseBody = await readProxyResponse(upstreamResponse);
-      const responseContentType = upstreamResponse.headers.get('content-type') ?? 'application/json; charset=utf-8';
       res.status(upstreamResponse.status);
-      res.type(responseContentType);
 
       if (responseBody === null) {
         return res.end();
       }
+
+      const responseContentType = upstreamResponse.headers.get('content-type') ?? 'application/json; charset=utf-8';
+      res.type(responseContentType);
 
       return typeof responseBody === 'string'
         ? res.send(responseBody)

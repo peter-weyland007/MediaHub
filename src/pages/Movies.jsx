@@ -15,6 +15,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import MediaCard from '@/components/shared/MediaCard';
 import PosterDisplayControls from '@/components/shared/PosterDisplayControls';
 import { getMediaGridClassName, getMediaGridStyle } from '@/components/shared/mediaDisplay';
+import { getMovieRuntimeIssue, getMovieRuntimeSeverity, formatMovieRuntime } from '@/components/shared/movieDetails';
 import { movieSortOptions, sortMoviesForDisplay } from '@/lib/mediaBrowserPreferences';
 import { filterMoviesForDisplay } from '@/lib/mediaSearch';
 import { toast } from 'sonner';
@@ -170,10 +171,16 @@ export default function Movies() {
   };
 
   const getMovieRuntime = (movie) => {
-    if (Number(movie?.runtime) > 0) {
-      return `${movie.runtime} min`;
-    }
-    return '—';
+    const runtimeIssue = getMovieRuntimeIssue(movie);
+    const runtimeSeverity = getMovieRuntimeSeverity(movie);
+
+    return {
+      text: runtimeIssue.fileRuntime !== '—' ? runtimeIssue.fileRuntime : formatMovieRuntime(movie?.runtime),
+      delta: runtimeIssue.delta,
+      className: runtimeSeverity.className,
+      deltaClassName: runtimeSeverity.deltaClassName,
+      label: runtimeSeverity.label,
+    };
   };
 
   const openMovieDetails = (movie) => {
@@ -289,16 +296,26 @@ export default function Movies() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedMovies.map((movie) => (
-                <TableRow key={movie.id} className="cursor-pointer" onClick={() => openMovieDetails(movie)}>
-                  <TableCell className="font-medium">{movie.title}</TableCell>
-                  <TableCell>{movie.year || '—'}</TableCell>
-                  <TableCell>{movie.hasFile ? 'Downloaded' : movie.monitored ? 'Monitored' : 'Unmonitored'}</TableCell>
-                  <TableCell>{movie.monitored ? 'Yes' : 'No'}</TableCell>
-                  <TableCell>{movie.hasFile ? 'Yes' : 'No'}</TableCell>
-                  <TableCell>{getMovieRuntime(movie)}</TableCell>
-                </TableRow>
-              ))}
+              {sortedMovies.map((movie) => {
+                const runtimeInfo = getMovieRuntime(movie);
+                const runtimeIssue = getMovieRuntimeIssue(movie);
+
+                return (
+                  <TableRow key={movie.id} className="cursor-pointer" onClick={() => openMovieDetails(movie)}>
+                    <TableCell className="font-medium">{movie.title}</TableCell>
+                    <TableCell>{movie.year || '—'}</TableCell>
+                    <TableCell>{movie.hasFile ? 'Downloaded' : movie.monitored ? 'Monitored' : 'Unmonitored'}</TableCell>
+                    <TableCell>{movie.monitored ? 'Yes' : 'No'}</TableCell>
+                    <TableCell>{movie.hasFile ? 'Yes' : 'No'}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className={runtimeInfo.className} title={runtimeInfo.label}>{runtimeInfo.text}</span>
+                        {runtimeIssue.hasBothRuntimes ? <span className={`text-xs ${runtimeInfo.deltaClassName}`}>Delta {runtimeIssue.delta}</span> : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

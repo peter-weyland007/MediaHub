@@ -97,6 +97,77 @@ test('movie playback helpers match Tautulli original titles when short title ali
   assert.equal(summary.lastWatchedBy, 'Darkmatter5');
 });
 
+test('movie playback helpers match Tautulli subtitle variants when the playback title extends the Radarr title', () => {
+  const movie = { title: 'Interview with the Vampire', year: 1994 };
+  const historyRows = [
+    {
+      title: 'Interview with the Vampire: The Vampire Chronicles',
+      full_title: 'Interview with the Vampire: The Vampire Chronicles',
+      original_title: '',
+      user: 'Darkmatter5',
+      friendly_name: 'Darkmatter5',
+      date: 1779931694,
+      stopped: 1779934817,
+      transcode_decision: 'direct play',
+      percent_complete: 96,
+      originally_available_at: '1994-11-11',
+      platform: 'tvOS',
+      player: 'Apple TV',
+      product: 'Plex for Apple TV',
+    },
+  ];
+
+  const matchingHistory = matchMovieHistoryRows(movie, historyRows);
+  const summary = buildMoviePlaybackSummary(movie, historyRows, []);
+
+  assert.equal(matchingHistory.length, 1);
+  assert.equal(matchingHistory[0].percent_complete, 96);
+  assert.equal(summary.totalPlays, 1);
+  assert.equal(summary.directPlays, 1);
+  assert.equal(summary.lastWatchedBy, 'Darkmatter5');
+});
+
+test('movie playback helpers prefer shared external ids over display-title differences when available', () => {
+  const movie = { title: 'Interview with the Vampire', year: 1994, tmdbId: 628, imdbId: 'tt0110148' };
+  const historyRows = [
+    {
+      title: 'Totally Different Library Title',
+      full_title: 'Interview with the Vampire: Collector Cut',
+      imdb_id: 'tt0110148',
+      tmdb_id: 628,
+      user: 'Darkmatter5',
+      friendly_name: 'Darkmatter5',
+      date: 1779931694,
+      stopped: 1779934817,
+      transcode_decision: 'direct play',
+      percent_complete: 96,
+      originally_available_at: '1994-11-11',
+    },
+  ];
+  const sessions = [
+    {
+      title: 'Different Plex Display Title',
+      year: 1994,
+      Guid: [
+        { id: 'imdb://tt0110148' },
+        { id: 'tmdb://628' },
+      ],
+      User: { title: 'Darkmatter5' },
+      Player: { product: 'Apple TV', state: 'playing' },
+    },
+  ];
+
+  const matchingHistory = matchMovieHistoryRows(movie, historyRows);
+  const matchingSessions = matchMoviePlexSessions(movie, sessions);
+  const summary = buildMoviePlaybackSummary(movie, historyRows, sessions);
+
+  assert.equal(matchingHistory.length, 1);
+  assert.equal(matchingSessions.length, 1);
+  assert.equal(summary.totalPlays, 1);
+  assert.equal(summary.activeSessions, 1);
+  assert.equal(summary.lastWatchedBy, 'Darkmatter5');
+});
+
 test('movie playback source wiring loads Tautulli/Plex data and renders playback info on movie details page', () => {
   const movieSource = read('src/pages/MovieDetails.jsx');
   const querySource = read('src/lib/mediaQueries.js');

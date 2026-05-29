@@ -247,6 +247,116 @@ export function getMovieRatings(movie = {}) {
 
 const normalizeLookupValue = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 const normalizeTitleToken = (value) => String(value || '').trim().toLowerCase();
+const normalizeExternalIdValue = (value) => String(value || '').trim().toLowerCase();
+const normalizeTmdbId = (value) => {
+  const digits = String(value ?? '').match(/\d+/)?.[0] || '';
+  return digits || '';
+};
+const movieTitlesMatch = (leftValue, rightValue) => {
+  const leftToken = normalizeTitleToken(leftValue);
+  const rightToken = normalizeTitleToken(rightValue);
+  if (!leftToken || !rightToken) {
+    return false;
+  }
+
+  if (leftToken === rightToken) {
+    return true;
+  }
+
+  const leftLookup = normalizeLookupValue(leftValue);
+  const rightLookup = normalizeLookupValue(rightValue);
+  if (!leftLookup || !rightLookup) {
+    return false;
+  }
+
+  return leftLookup.includes(rightLookup) || rightLookup.includes(leftLookup);
+};
+const addExternalIdCandidate = (accumulator, rawValue) => {
+  if (rawValue === null || rawValue === undefined) {
+    return;
+  }
+
+  if (Array.isArray(rawValue)) {
+    rawValue.forEach((entry) => addExternalIdCandidate(accumulator, entry));
+    return;
+  }
+
+  if (typeof rawValue === 'object') {
+    addExternalIdCandidate(accumulator, rawValue.id);
+    addExternalIdCandidate(accumulator, rawValue.guid);
+    addExternalIdCandidate(accumulator, rawValue.Guid);
+    addExternalIdCandidate(accumulator, rawValue.guids);
+    addExternalIdCandidate(accumulator, rawValue.Guids);
+    addExternalIdCandidate(accumulator, rawValue.imdb);
+    addExternalIdCandidate(accumulator, rawValue.imdbId);
+    addExternalIdCandidate(accumulator, rawValue.imdb_id);
+    addExternalIdCandidate(accumulator, rawValue.tmdb);
+    addExternalIdCandidate(accumulator, rawValue.tmdbId);
+    addExternalIdCandidate(accumulator, rawValue.tmdb_id);
+    addExternalIdCandidate(accumulator, rawValue.tvdb);
+    addExternalIdCandidate(accumulator, rawValue.tvdbId);
+    addExternalIdCandidate(accumulator, rawValue.tvdb_id);
+    return;
+  }
+
+  const value = normalizeExternalIdValue(rawValue);
+  if (!value) {
+    return;
+  }
+
+  const imdbMatches = value.match(/tt\d+/g) || [];
+  imdbMatches.forEach((match) => accumulator.imdb.add(match));
+
+  const tmdbPrefixes = [
+    ...value.matchAll(/(?:tmdb:\/\/|tmdb:|themoviedb:\/\/|themoviedb:)(\d+)/g),
+    ...value.matchAll(/com\.plexapp\.agents\.themoviedb:\/\/(\d+)/g),
+  ];
+  tmdbPrefixes.forEach((match) => {
+    if (match[1]) {
+      accumulator.tmdb.add(match[1]);
+    }
+  });
+
+  if (imdbMatches.length === 0 && tmdbPrefixes.length === 0) {
+    const maybeTmdbId = normalizeTmdbId(value);
+    if (maybeTmdbId && /^\d+$/.test(value)) {
+      accumulator.tmdb.add(maybeTmdbId);
+    }
+  }
+};
+const collectMovieExternalIds = (source = {}) => {
+  const accumulator = {
+    imdb: new Set(),
+    tmdb: new Set(),
+  };
+
+  addExternalIdCandidate(accumulator, source.imdbId);
+  addExternalIdCandidate(accumulator, source.imdb_id);
+  addExternalIdCandidate(accumulator, source.tmdbId);
+  addExternalIdCandidate(accumulator, source.tmdb_id);
+  addExternalIdCandidate(accumulator, source.guid);
+  addExternalIdCandidate(accumulator, source.Guid);
+  addExternalIdCandidate(accumulator, source.guids);
+  addExternalIdCandidate(accumulator, source.Guids);
+
+  return {
+    imdb: accumulator.imdb,
+    tmdb: accumulator.tmdb,
+  };
+};
+const movieExternalIdsOverlap = (leftSource = {}, rightSource = {}) => {
+  const leftIds = collectMovieExternalIds(leftSource);
+  const rightIds = collectMovieExternalIds(rightSource);
+
+  const hasOverlap = (leftSet, rightSet) => Array.from(leftSet).some((value) => rightSet.has(value));
+  const hasAnyIds = leftIds.imdb.size > 0 || leftIds.tmdb.size > 0;
+  const rightHasAnyIds = rightIds.imdb.size > 0 || rightIds.tmdb.size > 0;
+  if (!hasAnyIds || !rightHasAnyIds) {
+    return false;
+  }
+
+  return hasOverlap(leftIds.imdb, rightIds.imdb) || hasOverlap(leftIds.tmdb, rightIds.tmdb);
+};
 const parseMovieHistoryYear = (row = {}) => {
   const directYear = Number(row.year || 0);
   if (directYear > 0) {
@@ -270,15 +380,17 @@ export function matchMovieHistoryRows(movie = {}, historyRows = []) {
   }
 
   return historyRows.filter((row) => {
-    const rowTitles = [row.title, row.full_title, row.original_title]
-      .map((value) => normalizeTitleToken(value))
-      .filter(Boolean);
+    const rowTitles = [row.title, row.full_title, row.original_title].filter(Boolean);
     const rowYear = parseMovieHistoryYear(row);
     if (rowTitles.length === 0) {
       return false;
     }
 
-    if (!rowTitles.includes(targetTitle)) {
+    if (movieExternalIdsOverlap(movie, row)) {
+      return !targetYear || !rowYear || rowYear === targetYear;
+    }
+
+    if (!rowTitles.some((value) => movieTitlesMatch(value, targetTitle))) {
       return false;
     }
 
@@ -300,7 +412,11 @@ export function matchMoviePlexSessions(movie = {}, sessions = []) {
   return sessions.filter((session) => {
     const sessionTitle = normalizeTitleToken(session.title);
     const sessionYear = Number(session.year || 0);
-    if (!sessionTitle || sessionTitle !== targetTitle) {
+    if (movieExternalIdsOverlap(movie, session)) {
+      return !targetYear || !sessionYear || sessionYear === targetYear;
+    }
+
+    if (!sessionTitle || !movieTitlesMatch(sessionTitle, targetTitle)) {
       return false;
     }
 
